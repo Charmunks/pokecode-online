@@ -226,6 +226,52 @@ io.on("connection", (socket) => {
 
     socket.emit("currentPlayers", players);
     socket.broadcast.emit("playerJoined", players[socket.id]);
+
+    // Broadcast join message to all players
+    const joinMsg = {
+      username: user.username,
+      message: `${user.username} joined the game!`,
+      type: "system",
+      timestamp: Date.now(),
+    };
+    io.emit("chatMessage", joinMsg);
+
+    // Log join message to DB after broadcast
+    knex("chat_messages")
+      .insert({
+        userId: userId,
+        username: user.username,
+        message: joinMsg.message,
+        type: "system",
+      })
+      .catch((err) => console.error("Failed to log join message:", err));
+  });
+
+  socket.on("chatMessage", async (data) => {
+    const player = players[socket.id];
+    const userId = activeSockets[socket.id];
+    if (!player || !userId || !data.message) return;
+
+    const message = data.message.trim().slice(0, 200);
+    if (!message) return;
+
+    const msg = {
+      username: player.name,
+      message,
+      type: "chat",
+      timestamp: Date.now(),
+    };
+    io.emit("chatMessage", msg);
+
+    // Log to DB after broadcast
+    knex("chat_messages")
+      .insert({
+        userId,
+        username: player.name,
+        message,
+        type: "chat",
+      })
+      .catch((err) => console.error("Failed to log chat message:", err));
   });
 
   socket.on("playerMove", async (data) => {
