@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokeCode MMO</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #f8f8f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Press Start 2P', monospace;
+      overflow: hidden;
+      image-rendering: pixelated;
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      background: #f8f8f0 url('/assets/background.jpg') center/cover no-repeat;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .screen.hidden { display: none; }
+
+    .box {
+      background: #f8f8f0;
+      border: 4px solid #383838;
+      border-radius: 0;
+      padding: 32px 28px;
+      text-align: center;
+      width: 420px;
+      position: relative;
+      outline: 2px solid #f8f8f0;
+      outline-offset: -8px;
+    }
+
+    .box::before {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border: 2px solid #a0a0a0;
+      pointer-events: none;
+    }
+
+    .box h1 {
+      color: #383838;
+      font-size: 22px;
+      margin-bottom: 4px;
+      letter-spacing: 3px;
+    }
+
+    .box .subtitle {
+      color: #ec3750;
+      font-size: 8px;
+      margin-bottom: 20px;
+      letter-spacing: 1px;
+    }
+
+    .box p {
+      color: #585858;
+      font-size: 9px;
+      margin-bottom: 20px;
+      line-height: 1.8;
+    }
+
+    .box label {
+      color: #383838;
+      font-size: 9px;
+      display: block;
+      text-align: left;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+
+    .box input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: #fff;
+      border: 3px solid #383838;
+      border-radius: 0;
+      color: #383838;
+      font-size: 12px;
+      font-family: 'Press Start 2P', monospace;
+      outline: none;
+    }
+
+    .box input[type="text"]:focus {
+      border-color: #ec3750;
+    }
+
+    .box input[type="text"]::placeholder {
+      color: #b0b0b0;
+      font-size: 9px;
+    }
+
+    .gender-select {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .gender-option {
+      flex: 1;
+      padding: 12px 8px;
+      background: #fff;
+      border: 3px solid #383838;
+      border-radius: 0;
+      cursor: pointer;
+      text-align: center;
+      transition: none;
+    }
+
+    .gender-option:hover {
+      background: #e8e8e0;
+    }
+
+    .gender-option.selected {
+      border-color: #ec3750;
+      background: #fff0f2;
+    }
+
+    .gender-option .icon {
+      display: block;
+      margin: 0 auto 8px;
+      width: 48px;
+      height: 48px;
+      object-fit: none;
+      object-position: 0 0;
+      image-rendering: pixelated;
+    }
+
+    .gender-option .label {
+      color: #383838;
+      font-size: 9px;
+    }
+
+    .gender-option.selected .label {
+      color: #ec3750;
+    }
+
+    .btn {
+      margin-top: 20px;
+      width: 100%;
+      padding: 12px;
+      background: #ec3750;
+      border: 3px solid #383838;
+      border-radius: 0;
+      color: #fff;
+      font-size: 11px;
+      font-family: 'Press Start 2P', monospace;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-decoration: none;
+      display: block;
+      text-align: center;
+    }
+
+    .btn:hover {
+      background: #d42e46;
+    }
+
+    .btn:disabled {
+      background: #a0a0a0;
+      cursor: not-allowed;
+    }
+
+    .error-msg {
+      color: #ec3750;
+      font-size: 9px;
+      margin-top: 8px;
+      min-height: 14px;
+    }
+
+    .loading-text {
+      color: #585858;
+      font-size: 10px;
+    }
+
+    .pokeball-divider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .pokeball-divider::before,
+    .pokeball-divider::after {
+      content: '';
+      flex: 1;
+      height: 2px;
+      background: #a0a0a0;
+    }
+    .pokeball-divider span {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .cursor-blink {
+      animation: blink 1s step-start infinite;
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    #game-container {
+      display: none;
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading screen -->
+  <div id="loading-screen" class="screen">
+    <div class="box">
+      <h1>POKECODE</h1>
+      <p class="loading-text">Loading<span class="cursor-blink">_</span></p>
+    </div>
+  </div>
+
+  <!-- Login screen -->
+  <div id="login-screen" class="screen hidden" style="align-items: start; padding-top: 25vh;">
+    <div class="box">
+      <h1>POKECODE</h1>
+      <div class="pokeball-divider"><span></span></div>
+      <p>Sign in to begin your adventure!</p>
+      <a href="/auth/login" class="btn">▶ SIGN IN</a>
+    </div>
+  </div>
+
+  <!-- Setup screen (username + gender after first login) -->
+  <div id="setup-screen" class="screen hidden">
+    <div class="box">
+      <h1>POKECODE</h1>
+      <p class="subtitle">TRAINER SETUP</p>
+      <div class="pokeball-divider"><span>●</span></div>
+      <p>Choose your name and character</p>
+
+      <label>▶ YOUR NAME</label>
+      <input type="text" id="setup-username" placeholder="Enter name..." maxlength="12" />
+
+      <label>▶ CHOOSE CHARACTER</label>
+      <div class="gender-select">
+        <div class="gender-option selected" data-gender="male" onclick="selectGender('male')">
+          <img class="icon" src="assets/brendan.png" alt="Brendan" />
+          <span class="label">BRENDAN</span>
+        </div>
+        <div class="gender-option" data-gender="female" onclick="selectGender('female')">
+          <img class="icon" src="assets/may.png" alt="May" />
+          <span class="label">MAY</span>
+        </div>
+      </div>
+
+      <div id="setup-error" class="error-msg"></div>
+      <button class="btn" onclick="submitSetup()">▶ JOIN WORLD</button>
+    </div>
+  </div>
+
+  <div id="game-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
