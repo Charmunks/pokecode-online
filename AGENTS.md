@@ -62,6 +62,14 @@ pokecode/
 - Tile-based collision check via `isWalkable()` in `game.js`
 - Checks player foot hitbox corners against the tile grid
 
+### Pokémon System
+- Species data lives in `public/data/pokemon.json`, served statically at `/data/pokemon.json`. Each entry has `name`, `mainSprite`, `battleSprite`, and a `stats` object with `HP`, `ATTACK`, `SPA`, `SPD`, `SPEED`, `DEFENSE`, `EXPRATE`
+- Sprite paths point at `public/assets/pokemon/<id>.png` and `<id>_battle.png` — these image files don't exist yet; add real sprites there using the species id as the filename. The client falls back to a generated placeholder (colored square + initial) if a sprite fails to load
+- Owned Pokémon are stored per-user in the `user_pokemon` table (`migrations/20260822000000_create_user_pokemon.js`): `speciesId`, optional `nickname`, `location` (`party` or `box`), and `slot` for ordering
+- Party is capped at 6 in the UI; box has no limit. There is currently no way for a user to obtain a Pokémon — rows must be inserted directly for now
+- `GET /api/my-pokemon` (auth required) returns `{ party: [...], box: [...] }` for the current user
+- Client fetches species + owned data in `game.js` and shows them in a DOM overlay menu (`pokemon-menu-overlay`) when the player presses `1`; `Escape` or `1` again closes it. Movement is frozen while the menu is open, same as chat
+
 ## How to Replace Placeholder Sprites with Real Ones
 
 Real spritesheets are already in place (`brendan.png`, `may.png` at 48×48 frames, and 32×32 tile PNGs in `assets/tiles/`). To update them:
@@ -109,3 +117,5 @@ Real spritesheets are already in place (`brendan.png`, `may.png` at 48×48 frame
 - Keep client-side code in `public/js/`
 - Server state is kept in memory (no database yet)
 - Phaser loaded via CDN, Socket.IO served by the server
+
+# Important: Do not attempt to test your code or run commands such as migrations. Tell the user the changes made and what commands need to be run

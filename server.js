@@ -4,6 +4,7 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
 const cookieSession = require("cookie-session");
+const pokemonData = require("./public/data/pokemon.json");
 
 const app = express();
 const httpServer = createServer(app);
@@ -42,6 +43,14 @@ function requireAuth(req, res, next) {
   next();
 }
 
+async function requireAdmin(req, res, next) {
+  const user = await knex("users").where({ id: req.session.userId }).first();
+  if (!user?.admin) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
 // Get current user
 app.get("/api/me", async (req, res) => {
   if (!req.session.userId) {
@@ -62,6 +71,7 @@ app.get("/api/me", async (req, res) => {
       x: user.x,
       y: user.y,
       direction: user.direction,
+      admin: user.admin,
     },
   });
 });
@@ -194,8 +204,80 @@ app.post("/api/setup", requireAuth, async (req, res) => {
       x: user.x,
       y: user.y,
       direction: user.direction,
+      admin: user.admin,
     },
   });
+});
+
+// Get the current user's Pokémon, split into party (max 6) and box
+app.get("/api/my-pokemon", requireAuth, async (req, res) => {
+  const rows = await knex("user_pokemon")
+    .where({ userId: req.session.userId })
+    .orderBy("slot", "asc");
+
+  const format = (row) => ({
+    id: row.id,
+    speciesId: row.speciesId,
+    nickname: row.nickname,
+    slot: row.slot,
+  });
+
+  res.json({
+    party: rows.filter((r) => r.location === "party").map(format),
+    box: rows.filter((r) => r.location === "box").map(format),
+  });
+});
+
+// Admins can add a Pokémon directly to their own party
+app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
+  const { speciesId } = req.body;
+  if (typeof speciesId !== "string" || !pokemonData[speciesId]) {
+    return res.status(400).json({ error: "Invalid Pokémon species" });
+  }
+
+  try {
+    const pokemon = await knex.transaction(async (trx) => {
+      // Lock the user row so simultaneous requests cannot overfill the party.
+      await trx("users").where({ id: req.session.userId }).forUpdate().first();
+
+      const party = await trx("user_pokemon")
+        .where({ userId: req.session.userId, location: "party" })
+        .orderBy("slot", "asc");
+      if (party.length >= 6) {
+        const err = new Error("Your party is full");
+        err.status = 409;
+        throw err;
+      }
+
+      const usedSlots = new Set(party.map((row) => row.slot));
+      let slot = 0;
+      while (usedSlots.has(slot)) slot++;
+
+      const [row] = await trx("user_pokemon")
+        .insert({
+          userId: req.session.userId,
+          speciesId,
+          location: "party",
+          slot,
+        })
+        .returning("*");
+      return row;
+    });
+
+    res.status(201).json({
+      pokemon: {
+        id: pokemon.id,
+        speciesId: pokemon.speciesId,
+        nickname: pokemon.nickname,
+        slot: pokemon.slot,
+      },
+    });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    throw err;
+  }
 });
 
 // Track which sockets belong to which user

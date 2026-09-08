@@ -1,0 +1,86 @@
+{
+  "bulbasaur": {
+    "name": "Bulbasaur",
+    "mainSprite": "assets/pokemon/bulbasaur.png",
+    "battleSprite": "assets/pokemon/bulbasaur_battle.png",
+    "stats": {
+      "HP": 45,
+      "ATTACK": 49,
+      "SPA": 65,
+      "SPD": 65,
+      "SPEED": 45,
+      "DEFENSE": 49,
+      "EXPRATE": 64
+    }
+  },
+  "charmander": {
+    "name": "Charmander",
+    "mainSprite": "assets/pokemon/charmander.png",
+    "battleSprite": "assets/pokemon/charmander_battle.png",
+    "stats": {
+      "HP": 39,
+      "ATTACK": 52,
+      "SPA": 60,
+      "SPD": 50,
+      "SPEED": 65,
+      "DEFENSE": 43,
+      "EXPRATE": 62
+    }
+  },
+  "squirtle": {
+    "name": "Squirtle",
+    "mainSprite": "assets/pokemon/squirtle.png",
+    "battleSprite": "assets/pokemon/squirtle_battle.png",
+    "stats": {
+      "HP": 44,
+      "ATTACK": 48,
+      "SPA": 50,
+      "SPD": 64,
+      "SPEED": 43,
+      "DEFENSE": 65,
+      "EXPRATE": 63
+    }
+  },
+  "pikachu": {
+    "name": "Pikachu",
+    "mainSprite": "assets/pokemon/pikachu.png",
+    "battleSprite": "assets/pokemon/pikachu_battle.png",
+    "stats": {
+      "HP": 35,
+      "ATTACK": 55,
+      "SPA": 50,
+      "SPD": 50,
+      "SPEED": 90,
+      "DEFENSE": 40,
+      "EXPRATE": 82
+    }
+  },
+  "eevee": {
+    "name": "Eevee",
+    "mainSprite": "assets/pokemon/eevee.png",
+    "battleSprite": "assets/pokemon/eevee_battle.png",
+    "stats": {
+      "HP": 55,
+      "ATTACK": 55,
+      "SPA": 45,
+      "SPD": 65,
+      "SPEED": 55,
+      "DEFENSE": 50,
+      "EXPRATE": 65
+    }
+  },
+  "snorlax": {
+    "name": "Snorlax",
+    "mainSprite": "assets/pokemon/snorlax.png",
+    "battleSprite": "assets/pokemon/snorlax_battle.png",
+    "stats": {
+      "HP": 160,
+      "ATTACK": 110,
+      "SPA": 65,
+      "SPD": 65,
+      "SPEED": 30,
+      "DEFENSE": 65,
+      "EXPRATE": 99
+    }
+  }
+}

@@ -105,10 +105,20 @@ const MAP_DATA = [
   [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
   [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
   [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
-  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
-  [3,0,0,3,3,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,3,3,0,0,3],
-  [3,0,0,3,3,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,3,3,0,0,3],
-  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
+  [3,0,0,3,3,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,3,3,0,0,3],
+  [3,0,0,3,3,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,3,3,0,0,3],
+  [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
   [3,0,0,0,0,0,0,0,0,0,1,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
   [3,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,3],
   [3,0,0,0,4,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,4,0,0,0,3],
@@ -132,6 +142,9 @@ function startGame(user) {
   const chatMessages = [];
   const maxChatMessages = 50;
   let chatFadeTimer = null;
+  let pokemonMenuOpen = false;
+  let speciesData = {};
+  let myPokemon = { party: [], box: [] };
 
   const config = {
     type: Phaser.AUTO,
@@ -464,6 +477,11 @@ function startGame(user) {
         if (document.activeElement === chatInput) return;
         e.preventDefault();
         openChat();
+      } else if (e.key === "1") {
+        e.preventDefault();
+        togglePokemonMenu();
+      } else if (e.key === "Escape" && pokemonMenuOpen) {
+        closePokemonMenu();
       }
     });
 
@@ -471,6 +489,228 @@ function startGame(user) {
       if (chatMuted && msg.type !== "system") return;
       appendChatMessage(msg);
     });
+
+    // ─── Pokémon menu ───
+    const pokemonOverlay = document.createElement("div");
+    pokemonOverlay.id = "pokemon-menu-overlay";
+    pokemonOverlay.style.cssText =
+      "display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;justify-content:center;align-items:center;font-family:'Press Start 2P',monospace;";
+
+    const pokemonPanel = document.createElement("div");
+    pokemonPanel.style.cssText =
+      "background:#f8f8f0;border:4px solid #383838;padding:20px;width:640px;max-width:90vw;max-height:80vh;overflow-y:auto;color:#383838;";
+
+    const pokemonTitle = document.createElement("h2");
+    pokemonTitle.textContent = "YOUR POKÉMON";
+    pokemonTitle.style.cssText = "font-size:14px;margin-bottom:16px;letter-spacing:2px;";
+
+    const partyLabel = document.createElement("div");
+    partyLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
+
+    const partyGrid = document.createElement("div");
+    partyGrid.style.cssText =
+      "display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:20px;";
+
+    const boxLabel = document.createElement("div");
+    boxLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
+
+    const boxGrid = document.createElement("div");
+    boxGrid.style.cssText = "display:grid;grid-template-columns:repeat(6,1fr);gap:8px;";
+
+    const adminControls = document.createElement("div");
+    adminControls.style.cssText =
+      "display:none;margin-top:20px;padding-top:16px;border-top:2px solid #c0c0c0;";
+
+    const adminLabel = document.createElement("div");
+    adminLabel.textContent = "ADMIN: ADD TO PARTY";
+    adminLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
+
+    const adminRow = document.createElement("div");
+    adminRow.style.cssText = "display:flex;gap:8px;";
+
+    const speciesSelect = document.createElement("select");
+    speciesSelect.style.cssText =
+      "min-width:0;flex:1;padding:8px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+    const addPokemonButton = document.createElement("button");
+    addPokemonButton.type = "button";
+    addPokemonButton.textContent = "ADD";
+    addPokemonButton.style.cssText =
+      "padding:8px 12px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    const adminMessage = document.createElement("div");
+    adminMessage.style.cssText = "min-height:12px;margin-top:8px;font-size:7px;color:#585858;";
+
+    adminRow.appendChild(speciesSelect);
+    adminRow.appendChild(addPokemonButton);
+    adminControls.appendChild(adminLabel);
+    adminControls.appendChild(adminRow);
+    adminControls.appendChild(adminMessage);
+
+    const pokemonHint = document.createElement("div");
+    pokemonHint.textContent = "Press 1 or ESC to close";
+    pokemonHint.style.cssText =
+      "font-size:8px;color:#585858;margin-top:20px;text-align:center;";
+
+    pokemonPanel.appendChild(pokemonTitle);
+    pokemonPanel.appendChild(partyLabel);
+    pokemonPanel.appendChild(partyGrid);
+    pokemonPanel.appendChild(boxLabel);
+    pokemonPanel.appendChild(boxGrid);
+    pokemonPanel.appendChild(adminControls);
+    pokemonPanel.appendChild(pokemonHint);
+    pokemonOverlay.appendChild(pokemonPanel);
+    document.body.appendChild(pokemonOverlay);
+
+    function pokemonPlaceholderSprite(label) {
+      const colors = ["#ec3750", "#33d6a6", "#338eda", "#f1c40f", "#a463f2", "#ff8c42"];
+      let hash = 0;
+      for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0;
+      const color = colors[Math.abs(hash) % colors.length];
+      const letter = label.charAt(0).toUpperCase();
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${color}"/><text x="32" y="42" font-size="28" font-family="monospace" fill="#fff" text-anchor="middle">${letter}</text></svg>`;
+      return "data:image/svg+xml;base64," + btoa(svg);
+    }
+
+    function pokemonSlotEl(mon) {
+      const slot = document.createElement("div");
+      slot.style.cssText =
+        "display:flex;flex-direction:column;align-items:center;background:#fff;border:2px solid " +
+        (mon ? "#383838" : "#c0c0c0") +
+        ";padding:6px 4px;min-height:88px;justify-content:center;";
+
+      if (!mon) {
+        slot.style.borderStyle = "dashed";
+        const empty = document.createElement("div");
+        empty.textContent = "—";
+        empty.style.cssText = "font-size:16px;color:#c0c0c0;";
+        slot.appendChild(empty);
+        return slot;
+      }
+
+      const species = speciesData[mon.speciesId] || {};
+      const img = document.createElement("img");
+      img.src = species.mainSprite || "";
+      img.width = 48;
+      img.height = 48;
+      img.style.cssText = "image-rendering:pixelated;margin-bottom:4px;";
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = pokemonPlaceholderSprite(species.name || mon.speciesId || "?");
+      };
+
+      const label = document.createElement("div");
+      label.textContent = mon.nickname || species.name || mon.speciesId;
+      label.style.cssText = "font-size:7px;text-align:center;word-break:break-word;";
+
+      slot.appendChild(img);
+      slot.appendChild(label);
+      return slot;
+    }
+
+    function renderPokemonMenu() {
+      partyLabel.textContent = `PARTY (${myPokemon.party.length}/6)`;
+      partyGrid.innerHTML = "";
+      for (let i = 0; i < 6; i++) {
+        partyGrid.appendChild(pokemonSlotEl(myPokemon.party[i] || null));
+      }
+
+      boxLabel.textContent = `BOX (${myPokemon.box.length})`;
+      boxGrid.innerHTML = "";
+      if (myPokemon.box.length === 0) {
+        const empty = document.createElement("div");
+        empty.textContent = "Your box is empty.";
+        empty.style.cssText = "font-size:8px;color:#585858;grid-column:1/-1;";
+        boxGrid.appendChild(empty);
+      } else {
+        myPokemon.box.forEach((mon) => boxGrid.appendChild(pokemonSlotEl(mon)));
+      }
+
+      adminControls.style.display = user.admin ? "block" : "none";
+      addPokemonButton.disabled = myPokemon.party.length >= 6;
+      addPokemonButton.style.background = addPokemonButton.disabled ? "#a0a0a0" : "#ec3750";
+    }
+
+    function populateSpeciesSelect() {
+      speciesSelect.innerHTML = "";
+      Object.entries(speciesData)
+        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+        .forEach(([id, species]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = species.name;
+          speciesSelect.appendChild(option);
+        });
+    }
+
+    addPokemonButton.addEventListener("click", async () => {
+      if (!user.admin || !speciesSelect.value) return;
+      addPokemonButton.disabled = true;
+      adminMessage.style.color = "#585858";
+      adminMessage.textContent = "Adding...";
+
+      try {
+        const res = await fetch("/api/my-pokemon", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ speciesId: speciesSelect.value }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          adminMessage.style.color = "#ec3750";
+          adminMessage.textContent = data.error || "Could not add Pokémon.";
+        } else {
+          await loadMyPokemon();
+          renderPokemonMenu();
+          adminMessage.style.color = "#198754";
+          adminMessage.textContent = "Pokémon added to your party.";
+        }
+      } catch (err) {
+        adminMessage.style.color = "#ec3750";
+        adminMessage.textContent = "Connection error.";
+      } finally {
+        addPokemonButton.disabled = myPokemon.party.length >= 6;
+      }
+    });
+
+    async function loadMyPokemon() {
+      try {
+        const res = await fetch("/api/my-pokemon");
+        if (res.ok) {
+          myPokemon = await res.json();
+        }
+      } catch (err) {
+        // Keep whatever we had before; menu just renders as empty.
+      }
+    }
+
+    async function openPokemonMenu() {
+      pokemonMenuOpen = true;
+      await loadMyPokemon();
+      renderPokemonMenu();
+      pokemonOverlay.style.display = "flex";
+    }
+
+    function closePokemonMenu() {
+      pokemonMenuOpen = false;
+      pokemonOverlay.style.display = "none";
+    }
+
+    function togglePokemonMenu() {
+      if (pokemonMenuOpen) {
+        closePokemonMenu();
+      } else {
+        openPokemonMenu();
+      }
+    }
+
+    fetch("/data/pokemon.json")
+      .then((res) => res.json())
+      .then((data) => {
+        speciesData = data;
+        populateSpeciesSelect();
+      })
+      .catch(() => {});
 
     player = { sprite: playerSprite, nameText, direction: user.direction || "down" };
   }
@@ -528,7 +768,7 @@ function startGame(user) {
     let direction = player.direction;
     let moving = false;
 
-    if (chatOpen) {
+    if (chatOpen || pokemonMenuOpen) {
       playerSprite.setVelocity(0, 0);
       playerSprite.anims.play(`${gender}-idle-${direction}`, true);
       nameText.setPosition(playerSprite.x, playerSprite.y - 20);
