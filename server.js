@@ -223,25 +223,102 @@ app.post("/api/setup", requireAuth, async (req, res) => {
   });
 });
 
-// Get the current user's Pokémon, split into party (max 6) and box
-app.get("/api/my-pokemon", requireAuth, async (req, res) => {
-  const rows = await knex("user_pokemon")
-    .where({ userId: req.session.userId })
-    .orderBy("slot", "asc");
+function learnableMovesForLevel(speciesId, level) {
+  return (pokemonData[speciesId]?.moves || [])
+    .filter((learnedMove) => learnedMove.level <= level)
+    .map((learnedMove) => learnedMove.move);
+}
 
-  const format = (row) => ({
+function knownMovesForLevel(speciesId, level) {
+  return learnableMovesForLevel(speciesId, level).slice(-4);
+}
+
+function formatOwnedPokemon(row) {
+  return {
     id: row.id,
     speciesId: row.speciesId,
     nickname: row.nickname,
     level: row.level,
     friendship: row.friendship,
     slot: row.slot,
-  });
+    moves: Array.isArray(row.moves) ? row.moves : [],
+  };
+}
+
+// Get the current user's Pokémon, split into party (max 6) and box
+app.get("/api/my-pokemon", requireAuth, async (req, res) => {
+  const rows = await knex("user_pokemon")
+    .where({ userId: req.session.userId })
+    .orderBy("slot", "asc");
 
   res.json({
-    party: rows.filter((r) => r.location === "party").map(format),
-    box: rows.filter((r) => r.location === "box").map(format),
+    party: rows.filter((r) => r.location === "party").map(formatOwnedPokemon),
+    box: rows.filter((r) => r.location === "box").map(formatOwnedPokemon),
   });
+});
+
+// Update the four moves known by one of the current user's Pokémon.
+app.patch("/api/my-pokemon/:id/moves", requireAuth, async (req, res) => {
+  const pokemonId = Number(req.params.id);
+  const selectedMoves = req.body?.moves;
+  if (!Number.isInteger(pokemonId) || pokemonId <= 0 || !Array.isArray(selectedMoves)) {
+    return res.status(400).json({ error: "Invalid move selection" });
+  }
+
+  const pokemon = await knex("user_pokemon")
+    .where({ id: pokemonId, userId: req.session.userId })
+    .first();
+  if (!pokemon) {
+    return res.status(404).json({ error: "Pokémon not found" });
+  }
+
+  const learnableMoves = learnableMovesForLevel(pokemon.speciesId, pokemon.level);
+  const requiredMoveCount = Math.min(4, learnableMoves.length);
+  const uniqueMoves = new Set(selectedMoves);
+  const isValidSelection =
+    selectedMoves.length === requiredMoveCount &&
+    uniqueMoves.size === selectedMoves.length &&
+    selectedMoves.every(
+      (moveId) => typeof moveId === "string" && learnableMoves.includes(moveId)
+    );
+
+  if (!isValidSelection) {
+    return res.status(400).json({
+      error: `Choose exactly ${requiredMoveCount} moves this Pokémon can learn`,
+    });
+  }
+
+  const [updatedPokemon] = await knex("user_pokemon")
+    .where({ id: pokemonId, userId: req.session.userId })
+    .update({ moves: JSON.stringify(selectedMoves), updated_at: knex.fn.now() })
+    .returning("*");
+
+  res.json({ pokemon: formatOwnedPokemon(updatedPokemon) });
+});
+
+// Admins can update the level of one of their Pokémon.
+app.patch("/api/my-pokemon/:id/level", requireAuth, requireAdmin, async (req, res) => {
+  const pokemonId = Number(req.params.id);
+  const level = Number(req.body?.level);
+  if (
+    !Number.isInteger(pokemonId) ||
+    pokemonId <= 0 ||
+    !Number.isInteger(level) ||
+    level < 1 ||
+    level > 100
+  ) {
+    return res.status(400).json({ error: "Level must be a whole number from 1 to 100" });
+  }
+
+  const [updatedPokemon] = await knex("user_pokemon")
+    .where({ id: pokemonId, userId: req.session.userId })
+    .update({ level, updated_at: knex.fn.now() })
+    .returning("*");
+  if (!updatedPokemon) {
+    return res.status(404).json({ error: "Pokémon not found" });
+  }
+
+  res.json({ pokemon: formatOwnedPokemon(updatedPokemon) });
 });
 
 // Admins can add a Pokémon directly to their own party
@@ -275,20 +352,14 @@ app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
           speciesId,
           location: "party",
           slot,
+          moves: JSON.stringify(knownMovesForLevel(speciesId, 1)),
         })
         .returning("*");
       return row;
     });
 
     res.status(201).json({
-      pokemon: {
-        id: pokemon.id,
-        speciesId: pokemon.speciesId,
-        nickname: pokemon.nickname,
-        level: pokemon.level,
-        friendship: pokemon.friendship,
-        slot: pokemon.slot,
-      },
+      pokemon: formatOwnedPokemon(pokemon),
     });
   } catch (err) {
     if (err.status) {

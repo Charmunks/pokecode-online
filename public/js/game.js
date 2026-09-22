@@ -144,6 +144,7 @@ function startGame(user) {
   let chatFadeTimer = null;
   let pokemonMenuOpen = false;
   let speciesData = {};
+  let movesData = {};
   let myPokemon = { party: [], box: [] };
 
   const config = {
@@ -504,6 +505,8 @@ function startGame(user) {
     pokemonTitle.textContent = "YOUR POKÉMON";
     pokemonTitle.style.cssText = "font-size:14px;margin-bottom:16px;letter-spacing:2px;";
 
+    const pokemonListView = document.createElement("div");
+
     const partyLabel = document.createElement("div");
     partyLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
 
@@ -552,13 +555,18 @@ function startGame(user) {
     pokemonHint.style.cssText =
       "font-size:8px;color:#585858;margin-top:20px;text-align:center;";
 
+    const pokemonSummary = document.createElement("div");
+    pokemonSummary.style.display = "none";
+
     pokemonPanel.appendChild(pokemonTitle);
-    pokemonPanel.appendChild(partyLabel);
-    pokemonPanel.appendChild(partyGrid);
-    pokemonPanel.appendChild(boxLabel);
-    pokemonPanel.appendChild(boxGrid);
-    pokemonPanel.appendChild(adminControls);
-    pokemonPanel.appendChild(pokemonHint);
+    pokemonListView.appendChild(partyLabel);
+    pokemonListView.appendChild(partyGrid);
+    pokemonListView.appendChild(boxLabel);
+    pokemonListView.appendChild(boxGrid);
+    pokemonListView.appendChild(adminControls);
+    pokemonListView.appendChild(pokemonHint);
+    pokemonPanel.appendChild(pokemonListView);
+    pokemonPanel.appendChild(pokemonSummary);
     pokemonOverlay.appendChild(pokemonPanel);
     document.body.appendChild(pokemonOverlay);
 
@@ -573,11 +581,11 @@ function startGame(user) {
     }
 
     function pokemonSlotEl(mon) {
-      const slot = document.createElement("div");
+      const slot = document.createElement(mon ? "button" : "div");
       slot.style.cssText =
         "display:flex;flex-direction:column;align-items:center;background:#fff;border:2px solid " +
         (mon ? "#383838" : "#c0c0c0") +
-        ";padding:6px 4px;min-height:88px;justify-content:center;";
+        ";padding:6px 4px;min-height:88px;justify-content:center;font-family:'Press Start 2P',monospace;";
 
       if (!mon) {
         slot.style.borderStyle = "dashed";
@@ -587,6 +595,11 @@ function startGame(user) {
         slot.appendChild(empty);
         return slot;
       }
+
+      slot.type = "button";
+      slot.style.cursor = "pointer";
+      slot.setAttribute("aria-label", `View ${mon.nickname || mon.speciesId} summary`);
+      slot.addEventListener("click", () => renderPokemonSummary(mon));
 
       const species = speciesData[mon.speciesId] || {};
       const img = document.createElement("img");
@@ -613,7 +626,329 @@ function startGame(user) {
       return slot;
     }
 
+    function pokemonStats(species, level) {
+      const base = species.stats || {};
+      const scaledStat = (stat) => Math.floor(((base[stat] || 0) * 2 * level) / 100) + 5;
+      return {
+        HP: Math.floor(((base.HP || 0) * 2 * level) / 100) + level + 10,
+        ATTACK: scaledStat("ATTACK"),
+        DEFENSE: scaledStat("DEFENSE"),
+        SPA: scaledStat("SPA"),
+        SPD: scaledStat("SPD"),
+        SPEED: scaledStat("SPEED"),
+      };
+    }
+
+    function learnableMoves(mon) {
+      return (speciesData[mon.speciesId]?.moves || [])
+        .filter((learnedMove) => learnedMove.level <= mon.level)
+        .map((learnedMove) => learnedMove.move);
+    }
+
+    function renderMovePicker(mon) {
+      const availableMoves = learnableMoves(mon);
+      const selectedMoves = new Set(
+        (mon.moves || []).filter((moveId) => availableMoves.includes(moveId)).slice(0, 4)
+      );
+
+      pokemonSummary.innerHTML = "";
+
+      const heading = document.createElement("div");
+      heading.textContent = "CHOOSE 4 MOVES";
+      heading.style.cssText = "font-size:11px;color:#ec3750;margin-bottom:8px;";
+
+      const instructions = document.createElement("div");
+      instructions.style.cssText = "font-size:7px;color:#585858;line-height:1.7;margin-bottom:14px;";
+
+      const choices = document.createElement("div");
+      choices.style.cssText =
+        "display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;";
+
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:8px;";
+
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.textContent = "CANCEL";
+      cancelButton.style.cssText =
+        "padding:8px 10px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+      cancelButton.addEventListener("click", () => renderPokemonSummary(mon));
+
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.textContent = "SAVE MOVES";
+      saveButton.style.cssText =
+        "padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+      const message = document.createElement("div");
+      message.style.cssText = "min-height:12px;margin-top:10px;font-size:7px;color:#ec3750;";
+
+      function updateMovePicker() {
+        instructions.textContent = `${selectedMoves.size}/4 selected. Select exactly four moves.`;
+        saveButton.disabled = selectedMoves.size !== 4;
+        saveButton.style.background = saveButton.disabled ? "#a0a0a0" : "#ec3750";
+        saveButton.style.cursor = saveButton.disabled ? "not-allowed" : "pointer";
+      }
+
+      availableMoves.forEach((moveId) => {
+        const move = movesData[moveId] || { name: moveId };
+        const label = document.createElement("label");
+        label.style.cssText =
+          "display:flex;align-items:center;gap:8px;background:#fff;border:2px solid #383838;padding:10px;font-size:8px;line-height:1.5;cursor:pointer;";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = selectedMoves.has(moveId);
+        checkbox.addEventListener("change", () => {
+          message.textContent = "";
+          if (checkbox.checked && selectedMoves.size >= 4) {
+            checkbox.checked = false;
+            message.textContent = "A Pokémon can only know four moves.";
+          } else if (checkbox.checked) {
+            selectedMoves.add(moveId);
+          } else {
+            selectedMoves.delete(moveId);
+          }
+          updateMovePicker();
+        });
+
+        const moveText = document.createElement("span");
+        moveText.textContent = `${move.name} · ${move.type || "Unknown"}`;
+        label.appendChild(checkbox);
+        label.appendChild(moveText);
+        choices.appendChild(label);
+      });
+
+      saveButton.addEventListener("click", async () => {
+        if (selectedMoves.size !== 4) return;
+        saveButton.disabled = true;
+        message.style.color = "#585858";
+        message.textContent = "Saving...";
+
+        try {
+          const response = await fetch(`api/my-pokemon/${mon.id}/moves`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ moves: Array.from(selectedMoves) }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            message.style.color = "#ec3750";
+            message.textContent = data.error || "Could not save moves.";
+            updateMovePicker();
+            return;
+          }
+
+          mon.moves = data.pokemon.moves;
+          renderPokemonSummary(mon);
+        } catch (err) {
+          message.style.color = "#ec3750";
+          message.textContent = "Connection error.";
+          updateMovePicker();
+        }
+      });
+
+      actions.appendChild(cancelButton);
+      actions.appendChild(saveButton);
+      pokemonSummary.appendChild(heading);
+      pokemonSummary.appendChild(instructions);
+      pokemonSummary.appendChild(choices);
+      pokemonSummary.appendChild(actions);
+      pokemonSummary.appendChild(message);
+      updateMovePicker();
+    }
+
+    function renderPokemonSummary(mon) {
+      const species = speciesData[mon.speciesId] || {};
+      const displayName = mon.nickname || species.name || mon.speciesId;
+      const stats = pokemonStats(species, mon.level);
+
+      pokemonTitle.textContent = "POKÉMON SUMMARY";
+      pokemonListView.style.display = "none";
+      pokemonSummary.style.display = "block";
+      pokemonSummary.innerHTML = "";
+
+      const backButton = document.createElement("button");
+      backButton.type = "button";
+      backButton.textContent = "◀ BACK";
+      backButton.style.cssText =
+        "padding:7px 10px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;margin-bottom:16px;";
+      backButton.addEventListener("click", renderPokemonMenu);
+
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;align-items:center;gap:18px;margin-bottom:18px;";
+
+      const img = document.createElement("img");
+      img.src = species.mainSprite || "";
+      img.width = 96;
+      img.height = 96;
+      img.style.cssText = "image-rendering:pixelated;object-fit:contain;";
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = pokemonPlaceholderSprite(displayName);
+      };
+
+      const identity = document.createElement("div");
+      const summaryName = document.createElement("div");
+      summaryName.textContent = displayName;
+      summaryName.style.cssText = "font-size:13px;margin-bottom:10px;";
+
+      const summaryDetails = document.createElement("div");
+      summaryDetails.style.cssText = "font-size:8px;color:#585858;line-height:2;";
+      [species.name || mon.speciesId, `Lv. ${mon.level}`, `Friendship: ${mon.friendship}`].forEach(
+        (detail) => {
+          const line = document.createElement("div");
+          line.textContent = detail;
+          summaryDetails.appendChild(line);
+        }
+      );
+
+      identity.appendChild(summaryName);
+      identity.appendChild(summaryDetails);
+      header.appendChild(img);
+      header.appendChild(identity);
+
+      if (user.admin) {
+        const levelEditor = document.createElement("form");
+        levelEditor.style.cssText =
+          "display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:12px;background:#fff;border:2px solid #c0c0c0;";
+
+        const levelLabel = document.createElement("label");
+        levelLabel.textContent = "ADMIN LEVEL";
+        levelLabel.style.cssText = "font-size:8px;color:#ec3750;";
+
+        const levelInput = document.createElement("input");
+        levelInput.type = "number";
+        levelInput.min = "1";
+        levelInput.max = "100";
+        levelInput.step = "1";
+        levelInput.required = true;
+        levelInput.value = mon.level;
+        levelInput.setAttribute("aria-label", `${displayName} level`);
+        levelInput.style.cssText =
+          "width:70px;padding:7px;border:2px solid #383838;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+        const saveLevelButton = document.createElement("button");
+        saveLevelButton.type = "submit";
+        saveLevelButton.textContent = "SAVE";
+        saveLevelButton.style.cssText =
+          "padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+        const levelMessage = document.createElement("div");
+        levelMessage.style.cssText = "font-size:7px;color:#ec3750;line-height:1.5;";
+
+        levelEditor.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const level = Number(levelInput.value);
+          if (!Number.isInteger(level) || level < 1 || level > 100) {
+            levelMessage.textContent = "Choose a whole number from 1 to 100.";
+            return;
+          }
+
+          saveLevelButton.disabled = true;
+          levelMessage.style.color = "#585858";
+          levelMessage.textContent = "Saving...";
+
+          try {
+            const response = await fetch(`api/my-pokemon/${mon.id}/level`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ level }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              levelMessage.style.color = "#ec3750";
+              levelMessage.textContent = data.error || "Could not save level.";
+              saveLevelButton.disabled = false;
+              return;
+            }
+
+            mon.level = data.pokemon.level;
+            renderPokemonSummary(mon);
+          } catch (err) {
+            levelMessage.style.color = "#ec3750";
+            levelMessage.textContent = "Connection error.";
+            saveLevelButton.disabled = false;
+          }
+        });
+
+        levelEditor.appendChild(levelLabel);
+        levelEditor.appendChild(levelInput);
+        levelEditor.appendChild(saveLevelButton);
+        levelEditor.appendChild(levelMessage);
+        pokemonSummary.appendChild(backButton);
+        pokemonSummary.appendChild(header);
+        pokemonSummary.appendChild(levelEditor);
+      } else {
+        pokemonSummary.appendChild(backButton);
+        pokemonSummary.appendChild(header);
+      }
+
+      const statsLabel = document.createElement("div");
+      statsLabel.textContent = "STATS";
+      statsLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
+
+      const statsGrid = document.createElement("div");
+      statsGrid.style.cssText =
+        "display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:18px;";
+      Object.entries(stats).forEach(([name, value]) => {
+        const stat = document.createElement("div");
+        stat.style.cssText =
+          "background:#fff;border:2px solid #c0c0c0;padding:8px;font-size:7px;line-height:1.7;";
+        stat.textContent = `${name}  ${value}`;
+        statsGrid.appendChild(stat);
+      });
+
+      const movesLabel = document.createElement("div");
+      movesLabel.textContent = "KNOWN MOVES";
+      movesLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
+
+      const movesList = document.createElement("div");
+      movesList.style.cssText = "display:grid;grid-template-columns:repeat(2,1fr);gap:8px;";
+      if (!mon.moves || mon.moves.length === 0) {
+        movesList.textContent = "This Pokémon does not know any moves.";
+        movesList.style.cssText = "font-size:8px;color:#585858;line-height:1.7;";
+      } else {
+        mon.moves.forEach((moveId) => {
+          const move = movesData[moveId] || { name: moveId };
+          const moveCard = document.createElement("div");
+          moveCard.style.cssText = "background:#fff;border:2px solid #383838;padding:10px;";
+
+          const moveName = document.createElement("div");
+          moveName.textContent = move.name;
+          moveName.style.cssText = "font-size:9px;margin-bottom:7px;";
+
+          const moveDetails = document.createElement("div");
+          const damage = move.damage > 0 ? move.damage : "—";
+          moveDetails.textContent = `${move.type || "Unknown"} · ${move.category || "Unknown"} · PP ${move.pp ?? "—"} · DMG ${damage}`;
+          moveDetails.style.cssText = "font-size:6px;color:#585858;line-height:1.7;";
+
+          moveCard.appendChild(moveName);
+          moveCard.appendChild(moveDetails);
+          movesList.appendChild(moveCard);
+        });
+      }
+
+      pokemonSummary.appendChild(statsLabel);
+      pokemonSummary.appendChild(statsGrid);
+      pokemonSummary.appendChild(movesLabel);
+      pokemonSummary.appendChild(movesList);
+
+      if (learnableMoves(mon).length > 4) {
+        const chooseMovesButton = document.createElement("button");
+        chooseMovesButton.type = "button";
+        chooseMovesButton.textContent = "CHOOSE MOVES";
+        chooseMovesButton.style.cssText =
+          "margin-top:14px;padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+        chooseMovesButton.addEventListener("click", () => renderMovePicker(mon));
+        pokemonSummary.appendChild(chooseMovesButton);
+      }
+    }
+
     function renderPokemonMenu() {
+      pokemonTitle.textContent = "YOUR POKÉMON";
+      pokemonSummary.style.display = "none";
+      pokemonListView.style.display = "block";
       partyLabel.textContent = `PARTY (${myPokemon.party.length}/6)`;
       partyGrid.innerHTML = "";
       for (let i = 0; i < 6; i++) {
@@ -699,6 +1034,7 @@ function startGame(user) {
     function closePokemonMenu() {
       pokemonMenuOpen = false;
       pokemonOverlay.style.display = "none";
+      renderPokemonMenu();
     }
 
     function togglePokemonMenu() {
@@ -709,10 +1045,10 @@ function startGame(user) {
       }
     }
 
-    fetch("data/pokemon.json")
-      .then((res) => res.json())
-      .then((data) => {
-        speciesData = data;
+    Promise.all([fetch("data/pokemon.json"), fetch("data/moves.json")])
+      .then(async ([pokemonResponse, movesResponse]) => {
+        speciesData = await pokemonResponse.json();
+        movesData = await movesResponse.json();
         populateSpeciesSelect();
       })
       .catch(() => {});

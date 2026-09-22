@@ -1,0 +1,306 @@
+{
+  "tackle": {
+    "name": "Tackle",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 35,
+    "damage": 40,
+    "secondaryEffect": null
+  },
+  "growl": {
+    "name": "Growl",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 40,
+    "damage": 0,
+    "secondaryEffect": "Lowers the target's Attack by one stage."
+  },
+  "leech-seed": {
+    "name": "Leech Seed",
+    "type": "Grass",
+    "category": "Status",
+    "pp": 10,
+    "damage": 0,
+    "secondaryEffect": "Drains one eighth of the target's maximum HP each turn."
+  },
+  "vine-whip": {
+    "name": "Vine Whip",
+    "type": "Grass",
+    "category": "Physical",
+    "pp": 25,
+    "damage": 45,
+    "secondaryEffect": null
+  },
+  "poison-powder": {
+    "name": "Poison Powder",
+    "type": "Poison",
+    "category": "Status",
+    "pp": 35,
+    "damage": 0,
+    "secondaryEffect": "Poisons the target."
+  },
+  "sleep-powder": {
+    "name": "Sleep Powder",
+    "type": "Grass",
+    "category": "Status",
+    "pp": 15,
+    "damage": 0,
+    "secondaryEffect": "Puts the target to sleep."
+  },
+  "razor-leaf": {
+    "name": "Razor Leaf",
+    "type": "Grass",
+    "category": "Physical",
+    "pp": 25,
+    "damage": 55,
+    "secondaryEffect": "Has an increased critical-hit ratio."
+  },
+  "growth": {
+    "name": "Growth",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 20,
+    "damage": 0,
+    "secondaryEffect": "Raises the user's Attack and Special Attack by one stage."
+  },
+  "scratch": {
+    "name": "Scratch",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 35,
+    "damage": 40,
+    "secondaryEffect": null
+  },
+  "ember": {
+    "name": "Ember",
+    "type": "Fire",
+    "category": "Special",
+    "pp": 25,
+    "damage": 40,
+    "secondaryEffect": "Has a 10% chance to burn the target."
+  },
+  "smokescreen": {
+    "name": "Smokescreen",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 20,
+    "damage": 0,
+    "secondaryEffect": "Lowers the target's accuracy by one stage."
+  },
+  "rage": {
+    "name": "Rage",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 20,
+    "damage": 20,
+    "secondaryEffect": "Raises the user's Attack when the user is hit after using this move."
+  },
+  "scary-face": {
+    "name": "Scary Face",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 10,
+    "damage": 0,
+    "secondaryEffect": "Lowers the target's Speed by two stages."
+  },
+  "slash": {
+    "name": "Slash",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 20,
+    "damage": 70,
+    "secondaryEffect": "Has an increased critical-hit ratio."
+  },
+  "flamethrower": {
+    "name": "Flamethrower",
+    "type": "Fire",
+    "category": "Special",
+    "pp": 15,
+    "damage": 90,
+    "secondaryEffect": "Has a 10% chance to burn the target."
+  },
+  "tail-whip": {
+    "name": "Tail Whip",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 30,
+    "damage": 0,
+    "secondaryEffect": "Lowers the target's Defense by one stage."
+  },
+  "bubble": {
+    "name": "Bubble",
+    "type": "Water",
+    "category": "Special",
+    "pp": 30,
+    "damage": 40,
+    "secondaryEffect": "Has a 10% chance to lower the target's Speed by one stage."
+  },
+  "withdraw": {
+    "name": "Withdraw",
+    "type": "Water",
+    "category": "Status",
+    "pp": 40,
+    "damage": 0,
+    "secondaryEffect": "Raises the user's Defense by one stage."
+  },
+  "water-gun": {
+    "name": "Water Gun",
+    "type": "Water",
+    "category": "Special",
+    "pp": 25,
+    "damage": 40,
+    "secondaryEffect": null
+  },
+  "bite": {
+    "name": "Bite",
+    "type": "Dark",
+    "category": "Physical",
+    "pp": 25,
+    "damage": 60,
+    "secondaryEffect": "Has a 30% chance to make the target flinch."
+  },
+  "rapid-spin": {
+    "name": "Rapid Spin",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 40,
+    "damage": 50,
+    "secondaryEffect": "Removes binding effects, entry hazards, and Leech Seed from the user's side."
+  },
+  "protect": {
+    "name": "Protect",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 10,
+    "damage": 0,
+    "secondaryEffect": "Protects the user from most attacks for one turn."
+  },
+  "thunder-shock": {
+    "name": "Thunder Shock",
+    "type": "Electric",
+    "category": "Special",
+    "pp": 30,
+    "damage": 40,
+    "secondaryEffect": "Has a 10% chance to paralyze the target."
+  },
+  "thunder-wave": {
+    "name": "Thunder Wave",
+    "type": "Electric",
+    "category": "Status",
+    "pp": 20,
+    "damage": 0,
+    "secondaryEffect": "Paralyzes the target."
+  },
+  "quick-attack": {
+    "name": "Quick Attack",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 30,
+    "damage": 40,
+    "secondaryEffect": "Usually moves before attacks without increased priority."
+  },
+  "double-team": {
+    "name": "Double Team",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 15,
+    "damage": 0,
+    "secondaryEffect": "Raises the user's evasiveness by one stage."
+  },
+  "slam": {
+    "name": "Slam",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 20,
+    "damage": 80,
+    "secondaryEffect": null
+  },
+  "thunderbolt": {
+    "name": "Thunderbolt",
+    "type": "Electric",
+    "category": "Special",
+    "pp": 15,
+    "damage": 90,
+    "secondaryEffect": "Has a 10% chance to paralyze the target."
+  },
+  "helping-hand": {
+    "name": "Helping Hand",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 20,
+    "damage": 0,
+    "secondaryEffect": "Boosts an ally's attack damage by 50% for the turn."
+  },
+  "sand-attack": {
+    "name": "Sand Attack",
+    "type": "Ground",
+    "category": "Status",
+    "pp": 15,
+    "damage": 0,
+    "secondaryEffect": "Lowers the target's accuracy by one stage."
+  },
+  "take-down": {
+    "name": "Take Down",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 20,
+    "damage": 90,
+    "secondaryEffect": "The user takes recoil equal to one quarter of the damage dealt."
+  },
+  "amnesia": {
+    "name": "Amnesia",
+    "type": "Psychic",
+    "category": "Status",
+    "pp": 20,
+    "damage": 0,
+    "secondaryEffect": "Raises the user's Special Defense by two stages."
+  },
+  "defense-curl": {
+    "name": "Defense Curl",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 40,
+    "damage": 0,
+    "secondaryEffect": "Raises the user's Defense by one stage."
+  },
+  "belly-drum": {
+    "name": "Belly Drum",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 10,
+    "damage": 0,
+    "secondaryEffect": "Uses half of the user's maximum HP to maximize its Attack."
+  },
+  "yawn": {
+    "name": "Yawn",
+    "type": "Normal",
+    "category": "Status",
+    "pp": 10,
+    "damage": 0,
+    "secondaryEffect": "Makes the target fall asleep at the end of the next turn."
+  },
+  "rest": {
+    "name": "Rest",
+    "type": "Psychic",
+    "category": "Status",
+    "pp": 5,
+    "damage": 0,
+    "secondaryEffect": "Fully restores the user's HP and puts it to sleep for two turns."
+  },
+  "snore": {
+    "name": "Snore",
+    "type": "Normal",
+    "category": "Special",
+    "pp": 15,
+    "damage": 50,
+    "secondaryEffect": "Can only be used while asleep and has a 30% chance to make the target flinch."
+  },
+  "body-slam": {
+    "name": "Body Slam",
+    "type": "Normal",
+    "category": "Physical",
+    "pp": 15,
+    "damage": 85,
+    "secondaryEffect": "Has a 30% chance to paralyze the target."
+  }
+}

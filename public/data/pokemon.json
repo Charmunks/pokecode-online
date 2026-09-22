@@ -11,7 +11,17 @@
       "SPEED": 45,
       "DEFENSE": 49,
       "EXPRATE": 64
-    }
+    },
+    "moves": [
+      { "move": "tackle", "level": 1 },
+      { "move": "growl", "level": 3 },
+      { "move": "leech-seed", "level": 7 },
+      { "move": "vine-whip", "level": 9 },
+      { "move": "poison-powder", "level": 13 },
+      { "move": "sleep-powder", "level": 13 },
+      { "move": "razor-leaf", "level": 15 },
+      { "move": "growth", "level": 19 }
+    ]
   },
   "charmander": {
     "name": "Charmander",
@@ -25,7 +35,17 @@
       "SPEED": 65,
       "DEFENSE": 43,
       "EXPRATE": 62
-    }
+    },
+    "moves": [
+      { "move": "scratch", "level": 1 },
+      { "move": "growl", "level": 1 },
+      { "move": "ember", "level": 7 },
+      { "move": "smokescreen", "level": 10 },
+      { "move": "rage", "level": 16 },
+      { "move": "scary-face", "level": 19 },
+      { "move": "slash", "level": 28 },
+      { "move": "flamethrower", "level": 34 }
+    ]
   },
   "squirtle": {
     "name": "Squirtle",
@@ -39,7 +59,17 @@
       "SPEED": 43,
       "DEFENSE": 65,
       "EXPRATE": 63
-    }
+    },
+    "moves": [
+      { "move": "tackle", "level": 1 },
+      { "move": "tail-whip", "level": 4 },
+      { "move": "bubble", "level": 7 },
+      { "move": "withdraw", "level": 10 },
+      { "move": "water-gun", "level": 13 },
+      { "move": "bite", "level": 16 },
+      { "move": "rapid-spin", "level": 19 },
+      { "move": "protect", "level": 22 }
+    ]
   },
   "pikachu": {
     "name": "Pikachu",
@@ -53,7 +83,17 @@
       "SPEED": 90,
       "DEFENSE": 40,
       "EXPRATE": 82
-    }
+    },
+    "moves": [
+      { "move": "thunder-shock", "level": 1 },
+      { "move": "growl", "level": 1 },
+      { "move": "tail-whip", "level": 5 },
+      { "move": "thunder-wave", "level": 8 },
+      { "move": "quick-attack", "level": 11 },
+      { "move": "double-team", "level": 15 },
+      { "move": "slam", "level": 20 },
+      { "move": "thunderbolt", "level": 26 }
+    ]
   },
   "eevee": {
     "name": "Eevee",
@@ -67,7 +107,17 @@
       "SPEED": 55,
       "DEFENSE": 50,
       "EXPRATE": 65
-    }
+    },
+    "moves": [
+      { "move": "tackle", "level": 1 },
+      { "move": "tail-whip", "level": 1 },
+      { "move": "helping-hand", "level": 1 },
+      { "move": "sand-attack", "level": 8 },
+      { "move": "growl", "level": 15 },
+      { "move": "quick-attack", "level": 22 },
+      { "move": "bite", "level": 29 },
+      { "move": "take-down", "level": 36 }
+    ]
   },
   "snorlax": {
     "name": "Snorlax",
@@ -81,6 +131,16 @@
       "SPEED": 30,
       "DEFENSE": 65,
       "EXPRATE": 99
-    }
+    },
+    "moves": [
+      { "move": "tackle", "level": 1 },
+      { "move": "amnesia", "level": 1 },
+      { "move": "defense-curl", "level": 4 },
+      { "move": "belly-drum", "level": 9 },
+      { "move": "yawn", "level": 12 },
+      { "move": "rest", "level": 20 },
+      { "move": "snore", "level": 28 },
+      { "move": "body-slam", "level": 33 }
+    ]
   }
 }
