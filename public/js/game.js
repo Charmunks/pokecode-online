@@ -27,7 +27,7 @@ async function submitSetup() {
   }
 
   try {
-    const res = await fetch("/api/setup", {
+    const res = await fetch("api/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, gender: selectedGender }),
@@ -60,7 +60,7 @@ function launchGame() {
 // Check auth state on load
 async function init() {
   try {
-    const res = await fetch("/api/me");
+    const res = await fetch("api/me");
     const data = await res.json();
 
     if (data.user) {
@@ -133,7 +133,7 @@ const MAP_ROWS = MAP_DATA.length;
 const WALKABLE = new Set([0, 1, 4]);
 
 function startGame(user) {
-  const socket = io();
+  const socket = io({ path: new URL("socket.io", document.baseURI).pathname });
   const otherPlayers = {};
   const gender = user.gender;
   const name = user.username;
@@ -603,8 +603,13 @@ function startGame(user) {
       label.textContent = mon.nickname || species.name || mon.speciesId;
       label.style.cssText = "font-size:7px;text-align:center;word-break:break-word;";
 
+      const level = document.createElement("div");
+      level.textContent = `Lv. ${mon.level}`;
+      level.style.cssText = "font-size:6px;color:#585858;margin-top:4px;";
+
       slot.appendChild(img);
       slot.appendChild(label);
+      slot.appendChild(level);
       return slot;
     }
 
@@ -650,7 +655,7 @@ function startGame(user) {
       adminMessage.textContent = "Adding...";
 
       try {
-        const res = await fetch("/api/my-pokemon", {
+        const res = await fetch("api/my-pokemon", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ speciesId: speciesSelect.value }),
@@ -675,7 +680,7 @@ function startGame(user) {
 
     async function loadMyPokemon() {
       try {
-        const res = await fetch("/api/my-pokemon");
+        const res = await fetch("api/my-pokemon");
         if (res.ok) {
           myPokemon = await res.json();
         }
@@ -704,7 +709,7 @@ function startGame(user) {
       }
     }
 
-    fetch("/data/pokemon.json")
+    fetch("data/pokemon.json")
       .then((res) => res.json())
       .then((data) => {
         speciesData = data;

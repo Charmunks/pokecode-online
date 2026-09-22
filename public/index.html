@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <base href="__BASE_PATH__" />
   <title>PokeCode MMO</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
@@ -21,7 +22,7 @@
     .screen {
       position: fixed;
       inset: 0;
-      background: #f8f8f0 url('/assets/background.jpg') center/cover no-repeat;
+      background: #f8f8f0 url('assets/background.jpg') center/cover no-repeat;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -231,7 +232,7 @@
       <h1>POKECODE</h1>
       <div class="pokeball-divider"><span></span></div>
       <p>Sign in to begin your adventure!</p>
-      <a href="/auth/login" class="btn">▶ SIGN IN</a>
+      <a href="auth/login" class="btn">▶ SIGN IN</a>
     </div>
   </div>
 
@@ -266,7 +267,7 @@
   <div id="game-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="socket.io/socket.io.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const fs = require("fs");
 const path = require("path");
 const cookieSession = require("cookie-session");
 const pokemonData = require("./public/data/pokemon.json");
@@ -22,7 +23,17 @@ knex.migrate.latest().then(() => {
 const SESSION_SECRET = process.env.SESSION_SECRET || "pokecode-dev-secret-change-me";
 const HC_CLIENT_ID = process.env.HC_CLIENT_ID;
 const HC_CLIENT_SECRET = process.env.HC_CLIENT_SECRET;
-const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const configuredBaseUrl = process.env.BASE_URL || "http://localhost:3000";
+const BASE_URL = new URL(
+  /^https?:\/\//i.test(configuredBaseUrl)
+    ? configuredBaseUrl
+    : `https://${configuredBaseUrl}`
+).toString().replace(/\/+$/, "");
+const BASE_PATH = `${new URL(BASE_URL).pathname.replace(/\/+$/, "")}/`;
+const publicDir = path.join(__dirname, "public");
+const indexHtml = fs
+  .readFileSync(path.join(publicDir, "index.html"), "utf8")
+  .replace("__BASE_PATH__", BASE_PATH);
 
 app.use(express.json());
 app.use(
@@ -33,7 +44,10 @@ app.use(
   })
 );
 
-app.use(express.static(path.join(__dirname, "public")));
+app.get(["/", "/index.html"], (req, res) => {
+  res.type("html").send(indexHtml);
+});
+app.use(express.static(publicDir, { index: false }));
 
 // Auth middleware
 function requireAuth(req, res, next) {
@@ -91,7 +105,7 @@ app.get("/auth/login", (req, res) => {
 app.get("/auth/callback", async (req, res) => {
   const { code } = req.query;
   if (!code) {
-    return res.redirect("/?error=no_code");
+    return res.redirect(`${BASE_URL}/?error=no_code`);
   }
 
   try {
@@ -110,7 +124,7 @@ app.get("/auth/callback", async (req, res) => {
 
     if (!tokenRes.ok) {
       console.error("Token exchange failed:", await tokenRes.text());
-      return res.redirect("/?error=token_failed");
+      return res.redirect(`${BASE_URL}/?error=token_failed`);
     }
 
     const tokenData = await tokenRes.json();
@@ -122,7 +136,7 @@ app.get("/auth/callback", async (req, res) => {
 
     if (!meRes.ok) {
       console.error("User info fetch failed:", await meRes.text());
-      return res.redirect("/?error=user_fetch_failed");
+      return res.redirect(`${BASE_URL}/?error=user_fetch_failed`);
     }
 
     const meData = await meRes.json();
@@ -153,10 +167,10 @@ app.get("/auth/callback", async (req, res) => {
     }
 
     req.session.userId = user.id;
-    res.redirect("/");
+    res.redirect(`${BASE_URL}/`);
   } catch (err) {
     console.error("OAuth error:", err);
-    res.redirect("/?error=oauth_error");
+    res.redirect(`${BASE_URL}/?error=oauth_error`);
   }
 });
 
@@ -219,6 +233,8 @@ app.get("/api/my-pokemon", requireAuth, async (req, res) => {
     id: row.id,
     speciesId: row.speciesId,
     nickname: row.nickname,
+    level: row.level,
+    friendship: row.friendship,
     slot: row.slot,
   });
 
@@ -269,6 +285,8 @@ app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
         id: pokemon.id,
         speciesId: pokemon.speciesId,
         nickname: pokemon.nickname,
+        level: pokemon.level,
+        friendship: pokemon.friendship,
         slot: pokemon.slot,
       },
     });
