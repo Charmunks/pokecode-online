@@ -1,0 +1,182 @@
+#battle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(20, 32, 40, 0.94);
+  color: #383838;
+  font-family: "Press Start 2P", monospace;
+}
+
+.battle-shell {
+  width: min(900px, 96vw);
+  height: min(660px, 94vh);
+  display: grid;
+  grid-template-rows: minmax(320px, 1fr) 190px;
+  overflow: hidden;
+  border: 5px solid #383838;
+  background: #f8f8f0;
+  box-shadow: 0 0 0 3px #f8f8f0;
+}
+
+.battle-field {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(#9bd8e8 0 58%, #b9d67b 58% 100%);
+}
+
+.battle-field::before,
+.battle-field::after {
+  content: "";
+  position: absolute;
+  width: 260px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(75, 109, 56, 0.32);
+}
+
+.battle-field::before { right: 45px; top: 185px; }
+.battle-field::after { left: 45px; bottom: 26px; }
+
+.battle-combatant {
+  position: absolute;
+  z-index: 2;
+}
+
+.battle-combatant.enemy { right: 70px; top: 32px; }
+.battle-combatant.player { left: 70px; bottom: 24px; }
+
+.battle-sprite {
+  display: block;
+  width: 145px;
+  height: 145px;
+  margin: auto;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.battle-combatant.player .battle-sprite { transform: scaleX(-1); }
+
+.battle-info {
+  min-width: 265px;
+  padding: 12px;
+  border: 3px solid #383838;
+  background: #f8f8f0;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.battle-name-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.battle-health-track {
+  height: 12px;
+  overflow: hidden;
+  border: 2px solid #383838;
+  background: #d8d8d0;
+}
+
+.battle-health-fill { height: 100%; background: #33b864; }
+.battle-health-fill.low { background: #f1c40f; }
+.battle-health-fill.critical { background: #ec3750; }
+
+.battle-health-text,
+.battle-status { margin-top: 6px; color: #585858; font-size: 7px; text-align: right; }
+.battle-status { color: #b04328; text-transform: uppercase; }
+
+.battle-trainer {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 300px;
+  padding: 8px;
+  border: 2px solid #383838;
+  background: rgba(248, 248, 240, 0.9);
+  font-size: 7px;
+  line-height: 1.7;
+}
+
+.battle-trainer img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
+.battle-trainer[hidden] { display: none; }
+
+.battle-result {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  background: rgba(248, 248, 240, 0.9);
+  color: #383838;
+  font-size: clamp(16px, 4vw, 30px);
+  line-height: 1.6;
+  text-align: center;
+}
+
+.battle-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(310px, 1fr);
+  border-top: 4px solid #383838;
+  background: #f8f8f0;
+}
+
+.battle-log {
+  padding: 18px;
+  overflow-y: auto;
+  border-right: 4px solid #383838;
+  font-size: 9px;
+  line-height: 1.8;
+}
+
+.battle-log p + p { margin-top: 8px; }
+
+.battle-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: center;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.battle-controls.wide { grid-template-columns: 1fr; align-content: start; }
+
+.battle-button {
+  min-height: 54px;
+  padding: 10px;
+  border: 3px solid #383838;
+  background: #fff;
+  color: #383838;
+  font: 9px/1.5 "Press Start 2P", monospace;
+  cursor: pointer;
+}
+
+.battle-button:hover:not(:disabled),
+.battle-button.primary { background: #ec3750; color: #fff; }
+.battle-button:disabled { color: #888; border-color: #aaa; cursor: not-allowed; }
+.battle-button small { display: block; margin-top: 5px; font-size: 6px; color: #686868; }
+.battle-button.primary small { color: #fff; }
+
+@media (max-width: 700px) {
+  #battle-overlay { padding: 0; }
+  .battle-shell { width: 100vw; height: 100vh; border-width: 0; grid-template-rows: minmax(280px, 1fr) 250px; }
+  .battle-bottom { grid-template-columns: 1fr; grid-template-rows: 95px 1fr; }
+  .battle-log { border-right: 0; border-bottom: 3px solid #383838; padding: 10px; }
+  .battle-combatant.enemy { right: 16px; }
+  .battle-combatant.player { left: 16px; }
+  .battle-sprite { width: 105px; height: 105px; }
+  .battle-info { min-width: 195px; font-size: 7px; }
+  .battle-trainer { display: none; }
+}

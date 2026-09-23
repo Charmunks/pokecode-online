@@ -6,6 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const cookieSession = require("cookie-session");
 const pokemonData = require("./public/data/pokemon.json");
+const itemData = require("./public/data/items.json");
+const moveData = require("./public/data/moves.json");
 
 const app = express();
 const httpServer = createServer(app);
@@ -233,12 +235,18 @@ function knownMovesForLevel(speciesId, level) {
   return learnableMovesForLevel(speciesId, level).slice(-4);
 }
 
+function maxHealthForLevel(speciesId, level) {
+  const baseHp = pokemonData[speciesId].stats.HP;
+  return Math.floor((baseHp * 2 * level) / 100) + level + 10;
+}
+
 function formatOwnedPokemon(row) {
   return {
     id: row.id,
     speciesId: row.speciesId,
     nickname: row.nickname,
     level: row.level,
+    health: row.health,
     friendship: row.friendship,
     slot: row.slot,
     moves: Array.isArray(row.moves) ? row.moves : [],
@@ -352,6 +360,7 @@ app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
           speciesId,
           location: "party",
           slot,
+          health: maxHealthForLevel(speciesId, 1),
           moves: JSON.stringify(knownMovesForLevel(speciesId, 1)),
         })
         .returning("*");
@@ -366,6 +375,170 @@ app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
       return res.status(err.status).json({ error: err.message });
     }
     throw err;
+  }
+});
+
+// Get the current user's item quantities. Item details live in items.json.
+app.get("/api/my-items", requireAuth, async (req, res) => {
+  const rows = await knex("user_items")
+    .where({ userId: req.session.userId })
+    .orderBy("itemId", "asc");
+
+  res.json({
+    items: rows.map((row) => ({
+      itemId: row.itemId,
+      quantity: row.quantity,
+    })),
+  });
+});
+
+// Admins can add one or more items to their own bag.
+app.post("/api/my-items", requireAuth, requireAdmin, async (req, res) => {
+  const { itemId } = req.body;
+  const quantity = Number(req.body?.quantity ?? 1);
+  if (typeof itemId !== "string" || !itemData[itemId]) {
+    return res.status(400).json({ error: "Invalid item" });
+  }
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+    return res.status(400).json({ error: "Quantity must be a whole number from 1 to 999" });
+  }
+
+  const [item] = await knex("user_items")
+    .insert({ userId: req.session.userId, itemId, quantity })
+    .onConflict(["userId", "itemId"])
+    .merge({
+      quantity: knex.raw("user_items.quantity + ?", [quantity]),
+      updated_at: knex.fn.now(),
+    })
+    .returning(["itemId", "quantity"]);
+
+  res.status(201).json({ item });
+});
+
+// Persist the player-owned state produced by a completed battle.
+app.post("/api/battle/results", requireAuth, async (req, res) => {
+  const health = req.body?.health;
+  const usedItems = req.body?.usedItems;
+  const caughtPokemon = req.body?.caughtPokemon || null;
+  if (!Array.isArray(health) || !Array.isArray(usedItems)) {
+    return res.status(400).json({ error: "Invalid battle results" });
+  }
+
+  try {
+    const caught = await knex.transaction(async (trx) => {
+      const party = await trx("user_pokemon")
+        .where({ userId: req.session.userId, location: "party" })
+        .orderBy("slot", "asc")
+        .forUpdate();
+      const partyById = new Map(party.map((pokemon) => [pokemon.id, pokemon]));
+
+      if (health.length !== party.length) {
+        const error = new Error("The party changed during the battle");
+        error.status = 409;
+        throw error;
+      }
+      for (const result of health) {
+        const pokemon = partyById.get(Number(result?.id));
+        const value = Number(result?.health);
+        const maxHealth = pokemon
+          ? maxHealthForLevel(pokemon.speciesId, pokemon.level)
+          : -1;
+        if (!pokemon || !Number.isInteger(value) || value < 0 || value > maxHealth) {
+          const error = new Error("Invalid Pokémon health result");
+          error.status = 400;
+          throw error;
+        }
+        await trx("user_pokemon")
+          .where({ id: pokemon.id, userId: req.session.userId })
+          .update({ health: value, updated_at: trx.fn.now() });
+      }
+
+      const itemTotals = new Map();
+      for (const usedItem of usedItems) {
+        const itemId = usedItem?.itemId;
+        const quantity = Number(usedItem?.quantity);
+        if (!itemData[itemId]?.battleUsable || !Number.isInteger(quantity) || quantity < 1) {
+          const error = new Error("Invalid used item");
+          error.status = 400;
+          throw error;
+        }
+        itemTotals.set(itemId, (itemTotals.get(itemId) || 0) + quantity);
+      }
+      for (const [itemId, quantity] of itemTotals) {
+        const item = await trx("user_items")
+          .where({ userId: req.session.userId, itemId })
+          .forUpdate()
+          .first();
+        if (!item || item.quantity < quantity) {
+          const error = new Error(`Not enough ${itemData[itemId].name}`);
+          error.status = 409;
+          throw error;
+        }
+        if (item.quantity === quantity) {
+          await trx("user_items").where({ id: item.id }).del();
+        } else {
+          await trx("user_items")
+            .where({ id: item.id })
+            .update({ quantity: item.quantity - quantity, updated_at: trx.fn.now() });
+        }
+      }
+
+      if (!caughtPokemon) return null;
+      const { speciesId, destination } = caughtPokemon;
+      const level = Number(caughtPokemon.level);
+      const caughtHealth = Number(caughtPokemon.health);
+      const moves = caughtPokemon.moves;
+      if (
+        !pokemonData[speciesId] ||
+        !["party", "box"].includes(destination) ||
+        !Number.isInteger(level) ||
+        level < 1 ||
+        level > 100 ||
+        !Number.isInteger(caughtHealth) ||
+        caughtHealth < 1 ||
+        caughtHealth > maxHealthForLevel(speciesId, level) ||
+        !Array.isArray(moves) ||
+        moves.length < 1 ||
+        moves.length > 4 ||
+        moves.some((moveId) => typeof moveId !== "string" || !moveData[moveId])
+      ) {
+        const error = new Error("Invalid caught Pokémon");
+        error.status = 400;
+        throw error;
+      }
+      if (destination === "party" && party.length >= 6) {
+        const error = new Error("Your party is full");
+        error.status = 409;
+        throw error;
+      }
+
+      const destinationPokemon = await trx("user_pokemon")
+        .where({ userId: req.session.userId, location: destination })
+        .orderBy("slot", "asc");
+      const usedSlots = new Set(destinationPokemon.map((pokemon) => pokemon.slot));
+      let slot = 0;
+      while (usedSlots.has(slot)) slot++;
+
+      const [newPokemon] = await trx("user_pokemon")
+        .insert({
+          userId: req.session.userId,
+          speciesId,
+          location: destination,
+          slot,
+          level,
+          health: caughtHealth,
+          moves: JSON.stringify(moves),
+        })
+        .returning("*");
+      return formatOwnedPokemon(newPokemon);
+    });
+
+    res.json({ ok: true, caughtPokemon: caught });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    throw error;
   }
 });
 

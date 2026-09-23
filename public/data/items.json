@@ -1,0 +1,26 @@
+{
+  "potion": {
+    "name": "Potion",
+    "description": "Restores 20 HP to one Pokémon.",
+    "type": "Medicine",
+    "battleUsable": true
+  },
+  "antidote": {
+    "name": "Full Heal",
+    "description": "Cures one Pokémon of any status condition.",
+    "type": "Medicine",
+    "battleUsable": true
+  },
+  "poke-ball": {
+    "name": "Pokeball",
+    "description": "A device for catching wild Pokémon.",
+    "type": "Balls",
+    "battleUsable": true
+  },
+  "escape-rope": {
+    "name": "Escape Rope",
+    "description": "Returns you to the entrance of a cave or dungeon.",
+    "type": "Key Items",
+    "battleUsable": false
+  }
+}

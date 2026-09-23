@@ -143,9 +143,13 @@ function startGame(user) {
   const maxChatMessages = 50;
   let chatFadeTimer = null;
   let pokemonMenuOpen = false;
+  let battleOpen = false;
   let speciesData = {};
   let movesData = {};
+  let itemData = {};
   let myPokemon = { party: [], box: [] };
+  let myItems = [];
+  let selectedItemType = null;
 
   const config = {
     type: Phaser.AUTO,
@@ -473,7 +477,7 @@ function startGame(user) {
     });
 
     document.addEventListener("keydown", (e) => {
-      if (chatOpen) return;
+      if (chatOpen || battleOpen) return;
       if (e.key === "t" || e.key === "T") {
         if (document.activeElement === chatInput) return;
         e.preventDefault();
@@ -491,6 +495,15 @@ function startGame(user) {
       appendChatMessage(msg);
     });
 
+    window.addEventListener("battle:start", () => {
+      battleOpen = true;
+      if (pokemonMenuOpen) closePokemonMenu();
+      if (chatOpen) closeChat();
+    });
+    window.addEventListener("battle:end", () => {
+      battleOpen = false;
+    });
+
     // ─── Pokémon menu ───
     const pokemonOverlay = document.createElement("div");
     pokemonOverlay.id = "pokemon-menu-overlay";
@@ -504,6 +517,31 @@ function startGame(user) {
     const pokemonTitle = document.createElement("h2");
     pokemonTitle.textContent = "YOUR POKÉMON";
     pokemonTitle.style.cssText = "font-size:14px;margin-bottom:16px;letter-spacing:2px;";
+
+    const menuNavigation = document.createElement("div");
+    menuNavigation.style.cssText = "display:flex;gap:8px;margin-bottom:16px;";
+
+    const pokemonMenuButton = document.createElement("button");
+    pokemonMenuButton.type = "button";
+    pokemonMenuButton.textContent = "POKÉMON";
+    pokemonMenuButton.style.cssText =
+      "padding:9px 12px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    const bagMenuButton = document.createElement("button");
+    bagMenuButton.type = "button";
+    bagMenuButton.textContent = "BAG";
+    bagMenuButton.style.cssText =
+      "padding:9px 12px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    const testBattleButton = document.createElement("button");
+    testBattleButton.type = "button";
+    testBattleButton.textContent = "TEST BATTLE";
+    testBattleButton.style.cssText =
+      "padding:9px 12px;border:2px solid #383838;background:#338eda;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    menuNavigation.appendChild(pokemonMenuButton);
+    menuNavigation.appendChild(bagMenuButton);
+    menuNavigation.appendChild(testBattleButton);
 
     const pokemonListView = document.createElement("div");
 
@@ -558,6 +596,65 @@ function startGame(user) {
     const pokemonSummary = document.createElement("div");
     pokemonSummary.style.display = "none";
 
+    const bagView = document.createElement("div");
+    bagView.style.display = "none";
+
+    const itemTypeTabs = document.createElement("div");
+    itemTypeTabs.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;";
+
+    const itemList = document.createElement("div");
+    itemList.style.cssText = "display:grid;gap:8px;";
+
+    const itemAdminControls = document.createElement("div");
+    itemAdminControls.style.cssText =
+      "display:none;margin-top:20px;padding-top:16px;border-top:2px solid #c0c0c0;";
+
+    const itemAdminLabel = document.createElement("div");
+    itemAdminLabel.textContent = "ADMIN: ADD TO BAG";
+    itemAdminLabel.style.cssText = "font-size:9px;color:#ec3750;margin-bottom:8px;";
+
+    const itemAdminRow = document.createElement("div");
+    itemAdminRow.style.cssText = "display:flex;gap:8px;";
+
+    const itemSelect = document.createElement("select");
+    itemSelect.style.cssText =
+      "min-width:0;flex:1;padding:8px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+    const itemQuantity = document.createElement("input");
+    itemQuantity.type = "number";
+    itemQuantity.min = "1";
+    itemQuantity.max = "999";
+    itemQuantity.value = "1";
+    itemQuantity.setAttribute("aria-label", "Item quantity");
+    itemQuantity.style.cssText =
+      "width:75px;padding:8px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+    const addItemButton = document.createElement("button");
+    addItemButton.type = "button";
+    addItemButton.textContent = "ADD";
+    addItemButton.style.cssText =
+      "padding:8px 12px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    const itemAdminMessage = document.createElement("div");
+    itemAdminMessage.style.cssText =
+      "min-height:12px;margin-top:8px;font-size:7px;color:#585858;";
+
+    const bagHint = document.createElement("div");
+    bagHint.textContent = "Press 1 or ESC to close";
+    bagHint.style.cssText = "font-size:8px;color:#585858;margin-top:20px;text-align:center;";
+
+    itemAdminRow.appendChild(itemSelect);
+    itemAdminRow.appendChild(itemQuantity);
+    itemAdminRow.appendChild(addItemButton);
+    itemAdminControls.appendChild(itemAdminLabel);
+    itemAdminControls.appendChild(itemAdminRow);
+    itemAdminControls.appendChild(itemAdminMessage);
+    bagView.appendChild(itemTypeTabs);
+    bagView.appendChild(itemList);
+    bagView.appendChild(itemAdminControls);
+    bagView.appendChild(bagHint);
+
+    pokemonPanel.appendChild(menuNavigation);
     pokemonPanel.appendChild(pokemonTitle);
     pokemonListView.appendChild(partyLabel);
     pokemonListView.appendChild(partyGrid);
@@ -567,6 +664,7 @@ function startGame(user) {
     pokemonListView.appendChild(pokemonHint);
     pokemonPanel.appendChild(pokemonListView);
     pokemonPanel.appendChild(pokemonSummary);
+    pokemonPanel.appendChild(bagView);
     pokemonOverlay.appendChild(pokemonPanel);
     document.body.appendChild(pokemonOverlay);
 
@@ -620,9 +718,14 @@ function startGame(user) {
       level.textContent = `Lv. ${mon.level}`;
       level.style.cssText = "font-size:6px;color:#585858;margin-top:4px;";
 
+      const health = document.createElement("div");
+      health.textContent = `HP ${mon.health}/${pokemonStats(species, mon.level).HP}`;
+      health.style.cssText = "font-size:6px;color:#ec3750;margin-top:4px;";
+
       slot.appendChild(img);
       slot.appendChild(label);
       slot.appendChild(level);
+      slot.appendChild(health);
       return slot;
     }
 
@@ -795,13 +898,16 @@ function startGame(user) {
 
       const summaryDetails = document.createElement("div");
       summaryDetails.style.cssText = "font-size:8px;color:#585858;line-height:2;";
-      [species.name || mon.speciesId, `Lv. ${mon.level}`, `Friendship: ${mon.friendship}`].forEach(
-        (detail) => {
-          const line = document.createElement("div");
-          line.textContent = detail;
-          summaryDetails.appendChild(line);
-        }
-      );
+      [
+        species.name || mon.speciesId,
+        `Lv. ${mon.level}`,
+        `Health: ${mon.health}/${stats.HP}`,
+        `Friendship: ${mon.friendship}`,
+      ].forEach((detail) => {
+        const line = document.createElement("div");
+        line.textContent = detail;
+        summaryDetails.appendChild(line);
+      });
 
       identity.appendChild(summaryName);
       identity.appendChild(summaryDetails);
@@ -947,8 +1053,13 @@ function startGame(user) {
 
     function renderPokemonMenu() {
       pokemonTitle.textContent = "YOUR POKÉMON";
+      bagView.style.display = "none";
       pokemonSummary.style.display = "none";
       pokemonListView.style.display = "block";
+      pokemonMenuButton.style.background = "#ec3750";
+      pokemonMenuButton.style.color = "#fff";
+      bagMenuButton.style.background = "#fff";
+      bagMenuButton.style.color = "#383838";
       partyLabel.textContent = `PARTY (${myPokemon.party.length}/6)`;
       partyGrid.innerHTML = "";
       for (let i = 0; i < 6; i++) {
@@ -969,6 +1080,86 @@ function startGame(user) {
       adminControls.style.display = user.admin ? "block" : "none";
       addPokemonButton.disabled = myPokemon.party.length >= 6;
       addPokemonButton.style.background = addPokemonButton.disabled ? "#a0a0a0" : "#ec3750";
+      testBattleButton.disabled = !myPokemon.party.some((pokemon) => pokemon.health > 0);
+      testBattleButton.style.background = testBattleButton.disabled ? "#a0a0a0" : "#338eda";
+      testBattleButton.style.cursor = testBattleButton.disabled ? "not-allowed" : "pointer";
+    }
+
+    function renderBag() {
+      pokemonTitle.textContent = "YOUR BAG";
+      pokemonListView.style.display = "none";
+      pokemonSummary.style.display = "none";
+      bagView.style.display = "block";
+      pokemonMenuButton.style.background = "#fff";
+      pokemonMenuButton.style.color = "#383838";
+      bagMenuButton.style.background = "#ec3750";
+      bagMenuButton.style.color = "#fff";
+
+      const ownedTypes = Array.from(
+        new Set(
+          myItems
+            .map((ownedItem) => itemData[ownedItem.itemId]?.type)
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+      if (!ownedTypes.includes(selectedItemType)) {
+        selectedItemType = ownedTypes[0] || null;
+      }
+
+      itemTypeTabs.innerHTML = "";
+      ownedTypes.forEach((type) => {
+        const typeButton = document.createElement("button");
+        typeButton.type = "button";
+        typeButton.textContent = type.toUpperCase();
+        const selected = type === selectedItemType;
+        typeButton.style.cssText =
+          `padding:7px 9px;border:2px solid #383838;background:${selected ? "#338eda" : "#fff"};color:${selected ? "#fff" : "#383838"};font:7px 'Press Start 2P',monospace;cursor:pointer;`;
+        typeButton.addEventListener("click", () => {
+          selectedItemType = type;
+          renderBag();
+        });
+        itemTypeTabs.appendChild(typeButton);
+      });
+
+      itemList.innerHTML = "";
+      const visibleItems = myItems
+        .filter((ownedItem) => itemData[ownedItem.itemId]?.type === selectedItemType)
+        .sort((a, b) =>
+          itemData[a.itemId].name.localeCompare(itemData[b.itemId].name)
+        );
+
+      if (visibleItems.length === 0) {
+        const empty = document.createElement("div");
+        empty.textContent = "Your bag is empty.";
+        empty.style.cssText = "font-size:8px;color:#585858;line-height:1.7;padding:12px 0;";
+        itemList.appendChild(empty);
+      } else {
+        visibleItems.forEach((ownedItem) => {
+          const item = itemData[ownedItem.itemId];
+          const row = document.createElement("div");
+          row.style.cssText =
+            "display:grid;grid-template-columns:minmax(120px,1fr) 3fr auto;gap:12px;align-items:center;background:#fff;border:2px solid #c0c0c0;padding:12px;";
+
+          const itemName = document.createElement("div");
+          itemName.textContent = item.name;
+          itemName.style.cssText = "font-size:9px;line-height:1.5;";
+
+          const itemDescription = document.createElement("div");
+          itemDescription.textContent = item.description;
+          itemDescription.style.cssText = "font-size:7px;color:#585858;line-height:1.7;";
+
+          const quantity = document.createElement("div");
+          quantity.textContent = `×${ownedItem.quantity}`;
+          quantity.style.cssText = "font-size:10px;color:#ec3750;";
+
+          row.appendChild(itemName);
+          row.appendChild(itemDescription);
+          row.appendChild(quantity);
+          itemList.appendChild(row);
+        });
+      }
+
+      itemAdminControls.style.display = user.admin ? "block" : "none";
     }
 
     function populateSpeciesSelect() {
@@ -982,6 +1173,57 @@ function startGame(user) {
           speciesSelect.appendChild(option);
         });
     }
+
+    function populateItemSelect() {
+      itemSelect.innerHTML = "";
+      Object.entries(itemData)
+        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+        .forEach(([id, item]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = `${item.name} (${item.type})`;
+          itemSelect.appendChild(option);
+        });
+    }
+
+    pokemonMenuButton.addEventListener("click", renderPokemonMenu);
+    bagMenuButton.addEventListener("click", renderBag);
+    testBattleButton.addEventListener("click", async () => {
+      if (testBattleButton.disabled || !speciesData.charmander) return;
+      testBattleButton.disabled = true;
+      closePokemonMenu();
+
+      try {
+        await startBattle({
+          type: "trainer",
+          trainer: {
+            name: "Brendan",
+            sprite: "assets/brendan.png",
+            dialogue: "Let’s test your battle skills!",
+          },
+          enemyPokemon: [
+            {
+              species: "charmander",
+              level: 5,
+              stats: pokemonStats(speciesData.charmander, 5),
+              moves: ["scratch", "growl"],
+            },
+          ],
+          onVictory: () => {
+            appendChatMessage({
+              message: "Test battle won!",
+              type: "system",
+            });
+          },
+        });
+      } catch (error) {
+        appendChatMessage({
+          message: error.message || "Could not start the test battle.",
+          type: "system",
+        });
+        testBattleButton.disabled = false;
+      }
+    });
 
     addPokemonButton.addEventListener("click", async () => {
       if (!user.admin || !speciesSelect.value) return;
@@ -1013,6 +1255,49 @@ function startGame(user) {
       }
     });
 
+    addItemButton.addEventListener("click", async () => {
+      const quantity = Number(itemQuantity.value);
+      if (
+        !user.admin ||
+        !itemSelect.value ||
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        quantity > 999
+      ) {
+        itemAdminMessage.style.color = "#ec3750";
+        itemAdminMessage.textContent = "Choose a quantity from 1 to 999.";
+        return;
+      }
+
+      addItemButton.disabled = true;
+      itemAdminMessage.style.color = "#585858";
+      itemAdminMessage.textContent = "Adding...";
+
+      try {
+        const res = await fetch("api/my-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId: itemSelect.value, quantity }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          itemAdminMessage.style.color = "#ec3750";
+          itemAdminMessage.textContent = data.error || "Could not add item.";
+        } else {
+          selectedItemType = itemData[itemSelect.value].type;
+          await loadMyItems();
+          renderBag();
+          itemAdminMessage.style.color = "#198754";
+          itemAdminMessage.textContent = "Item added to your bag.";
+        }
+      } catch (err) {
+        itemAdminMessage.style.color = "#ec3750";
+        itemAdminMessage.textContent = "Connection error.";
+      } finally {
+        addItemButton.disabled = false;
+      }
+    });
+
     async function loadMyPokemon() {
       try {
         const res = await fetch("api/my-pokemon");
@@ -1024,9 +1309,21 @@ function startGame(user) {
       }
     }
 
+    async function loadMyItems() {
+      try {
+        const res = await fetch("api/my-items");
+        if (res.ok) {
+          const data = await res.json();
+          myItems = data.items;
+        }
+      } catch (err) {
+        // Keep the previous inventory if it cannot be refreshed.
+      }
+    }
+
     async function openPokemonMenu() {
       pokemonMenuOpen = true;
-      await loadMyPokemon();
+      await Promise.all([loadMyPokemon(), loadMyItems()]);
       renderPokemonMenu();
       pokemonOverlay.style.display = "flex";
     }
@@ -1045,11 +1342,17 @@ function startGame(user) {
       }
     }
 
-    Promise.all([fetch("data/pokemon.json"), fetch("data/moves.json")])
-      .then(async ([pokemonResponse, movesResponse]) => {
+    Promise.all([
+      fetch("data/pokemon.json"),
+      fetch("data/moves.json"),
+      fetch("data/items.json"),
+    ])
+      .then(async ([pokemonResponse, movesResponse, itemsResponse]) => {
         speciesData = await pokemonResponse.json();
         movesData = await movesResponse.json();
+        itemData = await itemsResponse.json();
         populateSpeciesSelect();
+        populateItemSelect();
       })
       .catch(() => {});
 
@@ -1109,7 +1412,7 @@ function startGame(user) {
     let direction = player.direction;
     let moving = false;
 
-    if (chatOpen || pokemonMenuOpen) {
+    if (chatOpen || pokemonMenuOpen || battleOpen) {
       playerSprite.setVelocity(0, 0);
       playerSprite.anims.play(`${gender}-idle-${direction}`, true);
       nameText.setPosition(playerSprite.x, playerSprite.y - 20);
