@@ -50,6 +50,39 @@
       flinched: false,
       protected: false,
       raging: false,
+      enduring: false,
+      invulnerable: false,
+      chargingMove: null,
+      confusionTurns: 0,
+      trappedTurns: 0,
+      trapSource: null,
+      perishTurns: 0,
+      stockpile: 0,
+      substituteHealth: 0,
+      disabledMove: null,
+      disableTurns: 0,
+      encoredMove: null,
+      encoreTurns: 0,
+      lastMove: null,
+      lastDamage: 0,
+      lastDamageCategory: null,
+      consecutiveMove: null,
+      consecutiveCount: 0,
+      focusEnergy: false,
+      charged: false,
+      ingrained: false,
+      cannotSwitch: false,
+      destinyBond: false,
+      reflectTurns: 0,
+      lightScreenTurns: 0,
+      safeguardTurns: 0,
+      mistTurns: 0,
+      lockedMove: null,
+      lockedTurns: 0,
+      rechargeTurns: 0,
+      hasActed: false,
+      waterSportTurns: 0,
+      mudSportTurns: 0,
     };
   }
 
@@ -251,7 +284,9 @@
           pokemon.name,
           () => this.switchPokemon(index, forced),
           `Lv. ${pokemon.level} · HP ${pokemon.health}/${pokemon.maxHealth}`,
-          pokemon.health <= 0 || index === this.playerIndex
+          pokemon.health <= 0 ||
+            index === this.playerIndex ||
+            (!forced && (this.player.trappedTurns > 0 || this.player.cannotSwitch || this.player.ingrained))
         )
       );
       if (!forced) buttons.push(this.button("BACK", () => this.showActions()));
@@ -295,21 +330,33 @@
       return value;
     }
 
-    predictedDamage(attacker, defender, moveId) {
-      const move = this.moves[moveId];
-      if (!move || move.category === "Status" || move.damage <= 0) return 0;
+    moveDamage(attacker, defender, move, power) {
+      if (!move || move.category === "Status" || power <= 0) return 0;
       const attackStat = move.category === "Physical" ? "ATTACK" : "SPA";
       const defenseStat = move.category === "Physical" ? "DEFENSE" : "SPD";
-      return Math.max(
+      let damage = Math.max(
         1,
         Math.floor(
-          ((this.adjustedStat(attacker, attackStat) /  this.adjustedStat(defender, defenseStat))*
-            move.damage * ((2 * attacker.level / 5) + 2)) / 50 + 2
+          ((this.adjustedStat(attacker, attackStat) / this.adjustedStat(defender, defenseStat)) *
+            power * ((2 * attacker.level / 5) + 2)) / 50 + 2
         )
       );
+      if (move.category === "Physical" && defender.reflectTurns > 0) damage = Math.max(1, Math.floor(damage / 2));
+      if (move.category === "Special" && defender.lightScreenTurns > 0) damage = Math.max(1, Math.floor(damage / 2));
+      return damage;
+    }
+
+    predictedDamage(attacker, defender, moveId) {
+      const move = this.moves[moveId];
+      return this.moveDamage(attacker, defender, move, move?.damage || 0);
     }
 
     enemyMove() {
+      if (this.enemy.chargingMove) return this.enemy.chargingMove;
+      if (this.enemy.lockedMove) return this.enemy.lockedMove;
+      if (this.enemy.encoredMove && this.enemy.moves.includes(this.enemy.encoredMove)) {
+        return this.enemy.encoredMove;
+      }
       const weighted = this.enemy.moves.map((moveId) => {
         const damage = this.predictedDamage(this.enemy, this.player, moveId);
         return { moveId, weight: damage > 0 ? damage * damage : 1 };
@@ -324,6 +371,15 @@
     }
 
     canAct(pokemon, moveId) {
+      if (pokemon.rechargeTurns > 0) {
+        pokemon.rechargeTurns -= 1;
+        this.log(`${pokemon.name} must recharge!`);
+        return false;
+      }
+      if (pokemon.imprisonedMoves?.includes(moveId)) {
+        this.log(`${pokemon.name} cannot use the imprisoned move!`);
+        return false;
+      }
       if (pokemon.flinched) {
         pokemon.flinched = false;
         this.log(`${pokemon.name} flinched and could not move!`);
@@ -341,6 +397,34 @@
       if (pokemon.status?.name === "paralyzed" && this.random() < 0.25) {
         this.log(`${pokemon.name} is paralyzed and cannot move!`);
         return false;
+      }
+      if (pokemon.status?.name === "frozen") {
+        if (this.random() < 0.2) {
+          pokemon.status = null;
+          this.log(`${pokemon.name} thawed out!`);
+        } else {
+          this.log(`${pokemon.name} is frozen solid!`);
+          return false;
+        }
+      }
+      if (pokemon.confusionTurns > 0) {
+        pokemon.confusionTurns -= 1;
+        if (pokemon.confusionTurns === 0) {
+          this.log(`${pokemon.name} snapped out of confusion!`);
+        } else if (this.random() < 1 / 3) {
+          const damage = this.moveDamage(
+            pokemon,
+            pokemon,
+            { category: "Physical" },
+            40
+          );
+          pokemon.health = Math.max(0, pokemon.health - damage);
+          this.log(`${pokemon.name} hurt itself in confusion!`);
+          this.render();
+          return false;
+        } else {
+          this.log(`${pokemon.name} is confused!`);
+        }
       }
       return true;
     }
@@ -369,64 +453,152 @@
     }
 
     async executeMove(attacker, defender, moveId) {
+      const firstTurn = !attacker.hasActed;
+      const selectedMoveId = moveId;
+      if (moveId === "mirror-move") {
+        if (!defender.lastMove || !this.moves[defender.lastMove]) {
+          this.log(`${attacker.name} used Mirror Move, but it failed!`);
+          return;
+        }
+        moveId = defender.lastMove;
+      } else if (moveId === "metronome") {
+        const choices = Object.keys(this.moves).filter(
+          (id) => !["metronome", "mirror-move", "struggle"].includes(id)
+        );
+        moveId = choices[Math.floor(this.random() * choices.length)];
+      }
       const snoringWhileAsleep =
         moveId === "snore" && attacker.status?.name === "asleep";
       if (attacker.health <= 0 || !this.canAct(attacker, moveId)) return;
       const move = this.moves[moveId];
+      if (selectedMoveId !== moveId) {
+        this.log(`${attacker.name} used ${this.moves[selectedMoveId].name}!`);
+      }
       this.log(`${attacker.name} used ${move.name}!`);
+      attacker.hasActed = true;
       await this.animateAttack(attacker);
-      const accuracy = Math.max(
-        0.33,
-        Math.min(1, stageMultiplier(attacker.stages.ACCURACY) / stageMultiplier(defender.stages.EVASION))
-      );
-      if (this.random() > accuracy) {
-        this.log(`${attacker.name}'s attack missed!`);
+      if (moveId === "future-sight") {
+        defender.futureSight = {
+          turns: 2,
+          damage: this.moveDamage(attacker, defender, move, move.damage),
+          source: attacker,
+        };
+        attacker.lastMove = selectedMoveId;
+        this.log(`${attacker.name} foresaw an attack!`);
         return;
       }
-
-      const effect = move.secondaryEffect ? window.BattleMoveEffects[moveId] : null;
       const context = {
         phase: "before",
         attacker,
         defender,
         move,
+        moveId,
+        firstTurn,
         damage: 0,
         damageMultiplier: 1,
+        power: move.damage,
+        accuracy: move.accuracy,
+        fixedDamage: null,
+        leaveAtOne: false,
         critical: false,
         preventMove: false,
         random: this.random,
         log: (message) => this.log(message),
+        escape: () => { context.escapeRequested = true; },
+        forceSwitch: (target, passStages) => this.forceSwitch(target, passStages),
       };
-      if (effect) effect(context);
+      window.BattleMoveEffects.apply(context);
       if (context.preventMove) return;
-      if (defender.protected && moveId !== "protect") {
+      if (attacker.lockedOnTarget === defender) {
+        context.accuracy = null;
+        attacker.lockedOnTarget = null;
+      }
+      const accuracy = context.accuracy === null
+        ? 1
+        : Math.max(
+          0.01,
+          Math.min(
+            1,
+            (context.accuracy / 100) *
+              stageMultiplier(attacker.stages.ACCURACY) /
+              stageMultiplier(defender.stages.EVASION)
+          )
+        );
+      if (this.random() > accuracy) {
+        this.log(`${attacker.name}'s attack missed!`);
+        attacker.consecutiveMove = null;
+        attacker.consecutiveCount = 0;
+        return;
+      }
+      if (defender.protected || defender.invulnerable) {
         this.log(`${defender.name} protected itself!`);
         return;
       }
 
       const previousAttackerHealth = attacker.health;
       const previousDefenderHealth = defender.health;
-      if (move.damage > 0 && move.category !== "Status") {
-        context.damage = Math.max(
-          1,
-          Math.floor(this.predictedDamage(attacker, defender, moveId) * context.damageMultiplier)
-        );
-        defender.health = Math.max(0, defender.health - context.damage);
-        this.log(`${defender.name} took ${context.damage} damage!`);
+      if (context.fixedDamage !== null || (context.power > 0 && move.category !== "Status")) {
+        const minimumHealth = context.leaveAtOne || defender.enduring ? 1 : 0;
+        const hits = move.minHits
+          ? move.minHits + Math.floor(this.random() * (move.maxHits - move.minHits + 1))
+          : 1;
+        let totalDamage = 0;
+        let landedHits = 0;
+        for (let hit = 0; hit < hits && defender.health > 0; hit += 1) {
+          const calculated = context.fixedDamage !== null
+            ? context.fixedDamage
+            : Math.max(
+              1,
+              Math.floor(
+                this.moveDamage(attacker, defender, move, context.power) * context.damageMultiplier
+              )
+            );
+          const available = Math.max(0, defender.health - minimumHealth);
+          const damage = Math.min(calculated, available);
+          if (defender.substituteHealth > 0) {
+            context.hitSubstitute = true;
+            const substituteDamage = Math.min(calculated, defender.substituteHealth);
+            defender.substituteHealth -= substituteDamage;
+            if (defender.substituteHealth === 0) this.log(`${defender.name}'s substitute broke!`);
+          } else {
+            defender.health -= damage;
+            totalDamage += damage;
+          }
+          landedHits += 1;
+        }
+        context.damage = totalDamage;
+        this.log(`${defender.name} took ${totalDamage} damage!`);
+        if (landedHits > 1) this.log(`It hit ${landedHits} times!`);
         if (context.critical) this.log("A critical hit!");
         if (defender.raging && defender.health > 0) {
           defender.stages.ATTACK = Math.min(6, defender.stages.ATTACK + 1);
           this.log(`${defender.name}'s rage raised its ATTACK!`);
         }
+        defender.lastDamage = totalDamage;
+        defender.lastDamageCategory = move.category;
+        if (defender.health <= 0 && defender.destinyBond) {
+          attacker.health = 0;
+          this.log(`${attacker.name} was taken down by Destiny Bond!`);
+        }
       }
       context.phase = "after";
-      if (effect && defender.health > 0) effect(context);
+      window.BattleMoveEffects.apply(context);
+      attacker.lastMove = selectedMoveId;
+      if (attacker.consecutiveMove === moveId) attacker.consecutiveCount += 1;
+      else {
+        attacker.consecutiveMove = moveId;
+        attacker.consecutiveCount = 1;
+      }
       if (snoringWhileAsleep) {
         attacker.status.turns -= 1;
         if (attacker.status.turns <= 0) {
           attacker.status = null;
           this.log(`${attacker.name} woke up!`);
         }
+      }
+      if (context.escapeRequested && this.options.type === "wild") {
+        await this.finish("ran", "GOT AWAY SAFELY");
+        return;
       }
       this.render();
       if (
@@ -440,8 +612,41 @@
     beginTurn() {
       this.player.protected = false;
       this.enemy.protected = false;
+      this.player.enduring = false;
+      this.enemy.enduring = false;
       this.player.flinched = false;
       this.enemy.flinched = false;
+      this.player.lastDamage = 0;
+      this.enemy.lastDamage = 0;
+      this.player.lastDamageCategory = null;
+      this.enemy.lastDamageCategory = null;
+    }
+
+    forceSwitch(target, passStages) {
+      const isPlayer = this.party.includes(target);
+      const team = isPlayer ? this.party : this.enemies;
+      const currentIndex = isPlayer ? this.playerIndex : this.enemyIndex;
+      if (target.ingrained || target.cannotSwitch) {
+        this.log(`${target.name} cannot switch out!`);
+        return;
+      }
+      const nextIndex = team.findIndex((pokemon, index) => index !== currentIndex && pokemon.health > 0);
+      if (nextIndex === -1) {
+        this.log("But it failed!");
+        return;
+      }
+      const stages = passStages ? { ...target.stages } : null;
+      if (isPlayer) this.playerIndex = nextIndex;
+      else this.enemyIndex = nextIndex;
+      if (stages) team[nextIndex].stages = stages;
+      this.log(`${target.name} was switched out!`);
+      const replacement = team[nextIndex];
+      replacement.hasActed = false;
+      if (replacement.spiked) {
+        const damage = Math.max(1, Math.floor(replacement.maxHealth / 8));
+        replacement.health = Math.max(0, replacement.health - damage);
+        this.log(`${replacement.name} was hurt by Spikes!`);
+      }
     }
 
     async attackTurn(playerMoveId) {
@@ -449,13 +654,18 @@
       this.busy = true;
       this.setControls([], false);
       this.beginTurn();
+      playerMoveId = this.player.chargingMove ||
+        this.player.lockedMove ||
+        (this.player.encoredMove && this.player.moves.includes(this.player.encoredMove)
+          ? this.player.encoredMove
+          : playerMoveId);
       const enemyMoveId = this.enemyMove();
       const playerSpeed = this.adjustedStat(this.player, "SPEED");
       const enemySpeed = this.adjustedStat(this.enemy, "SPEED");
-      const playerPriority = window.BattleMoveEffects[playerMoveId]?.priority === true;
-      const enemyPriority = window.BattleMoveEffects[enemyMoveId]?.priority === true;
+      const playerPriority = this.moves[playerMoveId].priority;
+      const enemyPriority = this.moves[enemyMoveId].priority;
       const playerFirst = playerPriority !== enemyPriority
-        ? playerPriority
+        ? playerPriority > enemyPriority
         : playerSpeed === enemySpeed
           ? this.random() < 0.5
           : playerSpeed > enemySpeed;
@@ -465,6 +675,7 @@
       for (const action of actions) {
         if (action[0].health > 0 && action[1].health > 0) await this.executeMove(...action);
       }
+      if (this.finished) return;
       await this.finishTurn();
     }
 
@@ -496,6 +707,56 @@
           this.log(`${pokemon.name} fell asleep!`);
         }
       }
+      if (pokemon.trappedTurns > 0 && pokemon.health > 0) {
+        pokemon.trappedTurns -= 1;
+        const damage = Math.max(1, Math.floor(pokemon.maxHealth / 8));
+        pokemon.health = Math.max(0, pokemon.health - damage);
+        this.log(`${pokemon.name} was hurt by the binding move!`);
+        if (pokemon.trappedTurns === 0) pokemon.trapSource = null;
+      }
+      if (pokemon.ingrained && pokemon.health > 0) {
+        const amount = Math.max(1, Math.floor(pokemon.maxHealth / 16));
+        const healed = Math.min(amount, pokemon.maxHealth - pokemon.health);
+        pokemon.health += healed;
+        if (healed > 0) this.log(`${pokemon.name} absorbed nutrients with its roots!`);
+      }
+      if (pokemon.futureSight && pokemon.health > 0) {
+        pokemon.futureSight.turns -= 1;
+        if (pokemon.futureSight.turns === 0) {
+          const damage = Math.min(pokemon.futureSight.damage, pokemon.health);
+          pokemon.health -= damage;
+          this.log(`${pokemon.name} took ${damage} damage from Future Sight!`);
+          pokemon.futureSight = null;
+        }
+      }
+      if (pokemon.perishTurns > 0 && pokemon.health > 0) {
+        pokemon.perishTurns -= 1;
+        if (pokemon.perishTurns === 0) {
+          pokemon.health = 0;
+          this.log(`${pokemon.name}'s perish count reached zero!`);
+        } else {
+          this.log(`${pokemon.name}'s perish count is ${pokemon.perishTurns}.`);
+        }
+      }
+      ["reflectTurns", "lightScreenTurns", "safeguardTurns", "mistTurns"].forEach((key) => {
+        if (pokemon[key] > 0) pokemon[key] -= 1;
+      });
+      ["waterSportTurns", "mudSportTurns"].forEach((key) => {
+        if (pokemon[key] > 0) pokemon[key] -= 1;
+      });
+      if (pokemon.lockedTurns > 0) {
+        pokemon.lockedTurns -= 1;
+        if (pokemon.lockedTurns === 0) {
+          const completedMove = pokemon.lockedMove;
+          pokemon.lockedMove = null;
+          if (["outrage", "petal-dance", "thrash"].includes(completedMove)) {
+            pokemon.confusionTurns = 2 + Math.floor(this.random() * 4);
+            this.log(`${pokemon.name} became confused from fatigue!`);
+          }
+        }
+      }
+      if (pokemon.disableTurns > 0 && --pokemon.disableTurns === 0) pokemon.disabledMove = null;
+      if (pokemon.encoreTurns > 0 && --pokemon.encoreTurns === 0) pokemon.encoredMove = null;
     }
 
     async finishTurn() {
@@ -538,11 +799,22 @@
     }
 
     async switchPokemon(index, forced) {
-      if (this.busy || index === this.playerIndex || this.party[index].health <= 0) return;
+      if (
+        this.busy ||
+        index === this.playerIndex ||
+        this.party[index].health <= 0 ||
+        (!forced && (this.player.trappedTurns > 0 || this.player.cannotSwitch || this.player.ingrained))
+      ) return;
       this.busy = true;
       this.setControls([], false);
       this.playerIndex = index;
+      this.player.hasActed = false;
       this.log(`Go, ${this.player.name}!`);
+      if (this.player.spiked) {
+        const damage = Math.max(1, Math.floor(this.player.maxHealth / 8));
+        this.player.health = Math.max(0, this.player.health - damage);
+        this.log(`${this.player.name} was hurt by Spikes!`);
+      }
       this.render();
       if (forced) {
         this.busy = false;
@@ -613,6 +885,10 @@
 
     async run() {
       if (this.busy || this.options.type !== "wild") return;
+      if (this.player.trappedTurns > 0 || this.player.cannotSwitch || this.player.ingrained) {
+        this.log(`${this.player.name} cannot escape!`);
+        return;
+      }
       this.log("You got away safely!");
       await this.finish("ran", "GOT AWAY SAFELY");
     }

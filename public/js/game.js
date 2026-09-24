@@ -1109,8 +1109,57 @@ function startGame(user) {
         healthEditor.appendChild(healthInput);
         healthEditor.appendChild(saveHealthButton);
         healthEditor.appendChild(healthMessage);
+
+        const deleteEditor = document.createElement("div");
+        deleteEditor.style.cssText =
+          "display:flex;align-items:center;gap:8px;padding-top:10px;border-top:2px solid #c0c0c0;";
+
+        const deletePokemonButton = document.createElement("button");
+        deletePokemonButton.type = "button";
+        deletePokemonButton.textContent = "DELETE POKÉMON";
+        deletePokemonButton.style.cssText =
+          "padding:8px 10px;border:2px solid #383838;background:#b42318;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+        const deleteMessage = document.createElement("div");
+        deleteMessage.style.cssText = "font-size:7px;color:#ec3750;line-height:1.5;";
+
+        deletePokemonButton.addEventListener("click", async () => {
+          if (!window.confirm(`Permanently delete ${displayName}? This cannot be undone.`)) {
+            return;
+          }
+
+          deletePokemonButton.disabled = true;
+          deleteMessage.style.color = "#585858";
+          deleteMessage.textContent = "Deleting...";
+
+          try {
+            const response = await fetch(`api/my-pokemon/${mon.id}`, {
+              method: "DELETE",
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              deleteMessage.style.color = "#ec3750";
+              deleteMessage.textContent = data.error || "Could not delete Pokémon.";
+              deletePokemonButton.disabled = false;
+              return;
+            }
+
+            await loadMyPokemon();
+            renderPokemonMenu();
+            adminMessage.style.color = "#198754";
+            adminMessage.textContent = `${displayName} was deleted.`;
+          } catch (err) {
+            deleteMessage.style.color = "#ec3750";
+            deleteMessage.textContent = "Connection error.";
+            deletePokemonButton.disabled = false;
+          }
+        });
+
+        deleteEditor.appendChild(deletePokemonButton);
+        deleteEditor.appendChild(deleteMessage);
         adminEditor.appendChild(levelEditor);
         adminEditor.appendChild(healthEditor);
+        adminEditor.appendChild(deleteEditor);
         pokemonSummary.appendChild(backButton);
         pokemonSummary.appendChild(header);
         pokemonSummary.appendChild(adminEditor);

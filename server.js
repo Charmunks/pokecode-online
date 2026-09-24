@@ -408,6 +408,23 @@ app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+// Admins can delete one of their Pokémon.
+app.delete("/api/my-pokemon/:id", requireAuth, requireAdmin, async (req, res) => {
+  const pokemonId = Number(req.params.id);
+  if (!Number.isInteger(pokemonId) || pokemonId <= 0) {
+    return res.status(400).json({ error: "Invalid Pokémon" });
+  }
+
+  const deleted = await knex("user_pokemon")
+    .where({ id: pokemonId, userId: req.session.userId })
+    .del();
+  if (!deleted) {
+    return res.status(404).json({ error: "Pokémon not found" });
+  }
+
+  res.json({ ok: true });
+});
+
 // Get the current user's item quantities. Item details live in items.json.
 app.get("/api/my-items", requireAuth, async (req, res) => {
   const rows = await knex("user_items")
