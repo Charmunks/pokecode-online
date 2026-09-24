@@ -48,6 +48,22 @@
 
 .battle-combatant.enemy { right: 70px; top: 32px; }
 .battle-combatant.player { left: 70px; bottom: 24px; }
+.battle-combatant.player.battle-attacking .battle-sprite {
+  animation: battle-player-lunge 420ms ease-in-out;
+}
+.battle-combatant.enemy.battle-attacking .battle-sprite {
+  animation: battle-enemy-lunge 420ms ease-in-out;
+}
+
+@keyframes battle-player-lunge {
+  0%, 100% { transform: translate(0, 0) scaleX(-1); }
+  50% { transform: translate(55px, -12px) scaleX(-1); }
+}
+
+@keyframes battle-enemy-lunge {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-55px, 12px); }
+}
 
 .battle-sprite {
   display: block;
@@ -57,8 +73,6 @@
   object-fit: contain;
   image-rendering: pixelated;
 }
-
-.battle-combatant.player .battle-sprite { transform: scaleX(-1); }
 
 .battle-info {
   min-width: 265px;
@@ -83,7 +97,11 @@
   background: #d8d8d0;
 }
 
-.battle-health-fill { height: 100%; background: #33b864; }
+.battle-health-fill {
+  height: 100%;
+  background: #33b864;
+  transition: width 700ms ease-out, background-color 250ms linear;
+}
 .battle-health-fill.low { background: #f1c40f; }
 .battle-health-fill.critical { background: #ec3750; }
 

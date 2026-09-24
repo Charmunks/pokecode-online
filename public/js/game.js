@@ -128,6 +128,7 @@ const MAP_DATA = [
 ];
 
 const TILE_SIZE = 32;
+const ENCOUNTER_STEP_SIZE = 8;
 const MAP_COLS = MAP_DATA[0].length;
 const MAP_ROWS = MAP_DATA.length;
 const WALKABLE = new Set([0, 1, 4]);
@@ -147,9 +148,11 @@ function startGame(user) {
   let speciesData = {};
   let movesData = {};
   let itemData = {};
+  let areaData = {};
   let myPokemon = { party: [], box: [] };
   let myItems = [];
   let selectedItemType = null;
+  let encounterPending = false;
 
   const config = {
     type: Phaser.AUTO,
@@ -182,6 +185,72 @@ function startGame(user) {
   let lastSentY = 0;
   let lastSentDir = "down";
   let lastSentMoving = false;
+  let lastStepChunk = null;
+
+  function pokemonStats(species, level) {
+    const base = species.stats || {};
+    const scaledStat = (stat) => Math.floor(((base[stat] || 0) * 2 * level) / 100) + 5;
+    return {
+      HP: Math.floor(((base.HP || 0) * 2 * level) / 100) + level + 10,
+      ATTACK: scaledStat("ATTACK"),
+      DEFENSE: scaledStat("DEFENSE"),
+      SPA: scaledStat("SPA"),
+      SPD: scaledStat("SPD"),
+      SPEED: scaledStat("SPEED"),
+    };
+  }
+
+  async function tryWildEncounter(x, y) {
+    const area = Object.values(areaData).find(({ coordinates }) =>
+      x >= coordinates.x.min &&
+      x <= coordinates.x.max &&
+      y >= coordinates.y.min &&
+      y <= coordinates.y.max
+    );
+    if (!area || Math.random() * 100 >= area.encounterChance) return;
+
+    const encounters = area.pokemon.filter(
+      (encounter) => speciesData[encounter.speciesId] && encounter.percentSpawn > 0
+    );
+    const totalWeight = encounters.reduce(
+      (total, encounter) => total + encounter.percentSpawn,
+      0
+    );
+    let spawnRoll = Math.random() * totalWeight;
+    const encounter = encounters.find((candidate) => {
+      spawnRoll -= candidate.percentSpawn;
+      return spawnRoll < 0;
+    });
+    if (!encounter) return;
+
+    const level = Phaser.Math.Between(
+      encounter.levelRange.min,
+      encounter.levelRange.max
+    );
+    const species = speciesData[encounter.speciesId];
+    const moves = species.moves
+      .filter((learnedMove) => learnedMove.level <= level)
+      .map((learnedMove) => learnedMove.move)
+      .slice(-4);
+
+    encounterPending = true;
+    playerSprite.setVelocity(0, 0);
+    try {
+      await startBattle({
+        type: "wild",
+        enemyPokemon: [{
+          species: encounter.speciesId,
+          level,
+          stats: pokemonStats(species, level),
+          moves,
+        }],
+      });
+    } catch (error) {
+      console.error("Could not start wild encounter:", error);
+    } finally {
+      encounterPending = false;
+    }
+  }
 
   function preload() {
     this.load.spritesheet("male", "assets/brendan.png", {
@@ -729,19 +798,6 @@ function startGame(user) {
       return slot;
     }
 
-    function pokemonStats(species, level) {
-      const base = species.stats || {};
-      const scaledStat = (stat) => Math.floor(((base[stat] || 0) * 2 * level) / 100) + 5;
-      return {
-        HP: Math.floor(((base.HP || 0) * 2 * level) / 100) + level + 10,
-        ATTACK: scaledStat("ATTACK"),
-        DEFENSE: scaledStat("DEFENSE"),
-        SPA: scaledStat("SPA"),
-        SPD: scaledStat("SPD"),
-        SPEED: scaledStat("SPEED"),
-      };
-    }
-
     function learnableMoves(mon) {
       return (speciesData[mon.speciesId]?.moves || [])
         .filter((learnedMove) => learnedMove.level <= mon.level)
@@ -915,9 +971,13 @@ function startGame(user) {
       header.appendChild(identity);
 
       if (user.admin) {
+        const adminEditor = document.createElement("div");
+        adminEditor.style.cssText =
+          "display:flex;flex-direction:column;gap:10px;margin-bottom:18px;padding:12px;background:#fff;border:2px solid #c0c0c0;";
+
         const levelEditor = document.createElement("form");
         levelEditor.style.cssText =
-          "display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:12px;background:#fff;border:2px solid #c0c0c0;";
+          "display:flex;align-items:center;gap:8px;";
 
         const levelLabel = document.createElement("label");
         levelLabel.textContent = "ADMIN LEVEL";
@@ -982,9 +1042,78 @@ function startGame(user) {
         levelEditor.appendChild(levelInput);
         levelEditor.appendChild(saveLevelButton);
         levelEditor.appendChild(levelMessage);
+
+        const healthEditor = document.createElement("form");
+        healthEditor.style.cssText = "display:flex;align-items:center;gap:8px;";
+
+        const healthLabel = document.createElement("label");
+        healthLabel.textContent = "ADMIN HEALTH";
+        healthLabel.style.cssText = "font-size:8px;color:#ec3750;";
+
+        const healthInput = document.createElement("input");
+        healthInput.type = "number";
+        healthInput.min = "0";
+        healthInput.max = String(stats.HP);
+        healthInput.step = "1";
+        healthInput.required = true;
+        healthInput.value = mon.health;
+        healthInput.setAttribute("aria-label", `${displayName} health`);
+        healthInput.style.cssText =
+          "width:70px;padding:7px;border:2px solid #383838;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+        const saveHealthButton = document.createElement("button");
+        saveHealthButton.type = "submit";
+        saveHealthButton.textContent = "SAVE";
+        saveHealthButton.style.cssText =
+          "padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+        const healthMessage = document.createElement("div");
+        healthMessage.style.cssText = "font-size:7px;color:#ec3750;line-height:1.5;";
+
+        healthEditor.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const health = Number(healthInput.value);
+          if (!Number.isInteger(health) || health < 0 || health > stats.HP) {
+            healthMessage.textContent = `Choose a whole number from 0 to ${stats.HP}.`;
+            return;
+          }
+
+          saveHealthButton.disabled = true;
+          healthMessage.style.color = "#585858";
+          healthMessage.textContent = "Saving...";
+
+          try {
+            const response = await fetch(`api/my-pokemon/${mon.id}/health`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ health }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              healthMessage.style.color = "#ec3750";
+              healthMessage.textContent = data.error || "Could not save health.";
+              saveHealthButton.disabled = false;
+              return;
+            }
+
+            mon.health = data.pokemon.health;
+            renderPokemonSummary(mon);
+          } catch (err) {
+            healthMessage.style.color = "#ec3750";
+            healthMessage.textContent = "Connection error.";
+            saveHealthButton.disabled = false;
+          }
+        });
+
+        healthEditor.appendChild(healthLabel);
+        healthEditor.appendChild(healthInput);
+        healthEditor.appendChild(saveHealthButton);
+        healthEditor.appendChild(healthMessage);
+        adminEditor.appendChild(levelEditor);
+        adminEditor.appendChild(healthEditor);
         pokemonSummary.appendChild(backButton);
         pokemonSummary.appendChild(header);
-        pokemonSummary.appendChild(levelEditor);
+        pokemonSummary.appendChild(adminEditor);
       } else {
         pokemonSummary.appendChild(backButton);
         pokemonSummary.appendChild(header);
@@ -1198,7 +1327,7 @@ function startGame(user) {
           type: "trainer",
           trainer: {
             name: "Brendan",
-            sprite: "assets/brendan.png",
+            sprite: "assets/npc/brendan.png",
             dialogue: "Let’s test your battle skills!",
           },
           enemyPokemon: [
@@ -1346,11 +1475,13 @@ function startGame(user) {
       fetch("data/pokemon.json"),
       fetch("data/moves.json"),
       fetch("data/items.json"),
+      fetch("data/area.json"),
     ])
-      .then(async ([pokemonResponse, movesResponse, itemsResponse]) => {
+      .then(async ([pokemonResponse, movesResponse, itemsResponse, areaResponse]) => {
         speciesData = await pokemonResponse.json();
         movesData = await movesResponse.json();
         itemData = await itemsResponse.json();
+        areaData = await areaResponse.json();
         populateSpeciesSelect();
         populateItemSelect();
       })
@@ -1412,7 +1543,7 @@ function startGame(user) {
     let direction = player.direction;
     let moving = false;
 
-    if (chatOpen || pokemonMenuOpen || battleOpen) {
+    if (chatOpen || pokemonMenuOpen || battleOpen || encounterPending) {
       playerSprite.setVelocity(0, 0);
       playerSprite.anims.play(`${gender}-idle-${direction}`, true);
       nameText.setPosition(playerSprite.x, playerSprite.y - 20);
@@ -1450,6 +1581,25 @@ function startGame(user) {
     const footX = playerSprite.x;
     const footY = playerSprite.y + 14;
     const step = 4;
+    const stepChunk =
+      `${Math.floor(footX / ENCOUNTER_STEP_SIZE)},` +
+      `${Math.floor(footY / ENCOUNTER_STEP_SIZE)}`;
+
+    if (lastStepChunk === null) {
+      lastStepChunk = stepChunk;
+    } else if (stepChunk !== lastStepChunk) {
+      lastStepChunk = stepChunk;
+      const tileCol = Math.floor(footX / TILE_SIZE);
+      const tileRow = Math.floor(footY / TILE_SIZE);
+      if (MAP_DATA[tileRow]?.[tileCol] === 4) {
+        tryWildEncounter(footX, footY);
+        if (encounterPending) {
+          playerSprite.setVelocity(0, 0);
+          playerSprite.anims.play(`${gender}-idle-${direction}`, true);
+          return;
+        }
+      }
+    }
 
     if (vx !== 0 && !canMove(footX + Math.sign(vx) * step, footY)) {
       vx = 0;

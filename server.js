@@ -329,6 +329,36 @@ app.patch("/api/my-pokemon/:id/level", requireAuth, requireAdmin, async (req, re
   res.json({ pokemon: formatOwnedPokemon(updatedPokemon) });
 });
 
+// Admins can update the health of one of their Pokémon.
+app.patch("/api/my-pokemon/:id/health", requireAuth, requireAdmin, async (req, res) => {
+  const pokemonId = Number(req.params.id);
+  const health = Number(req.body?.health);
+  if (!Number.isInteger(pokemonId) || pokemonId <= 0 || !Number.isInteger(health)) {
+    return res.status(400).json({ error: "Health must be a whole number" });
+  }
+
+  const pokemon = await knex("user_pokemon")
+    .where({ id: pokemonId, userId: req.session.userId })
+    .first();
+  if (!pokemon) {
+    return res.status(404).json({ error: "Pokémon not found" });
+  }
+
+  const maxHealth = maxHealthForLevel(pokemon.speciesId, pokemon.level);
+  if (health < 0 || health > maxHealth) {
+    return res.status(400).json({
+      error: `Health must be a whole number from 0 to ${maxHealth}`,
+    });
+  }
+
+  const [updatedPokemon] = await knex("user_pokemon")
+    .where({ id: pokemonId, userId: req.session.userId })
+    .update({ health, updated_at: knex.fn.now() })
+    .returning("*");
+
+  res.json({ pokemon: formatOwnedPokemon(updatedPokemon) });
+});
+
 // Admins can add a Pokémon directly to their own party
 app.post("/api/my-pokemon", requireAuth, requireAdmin, async (req, res) => {
   const { speciesId } = req.body;

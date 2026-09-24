@@ -1,0 +1,35 @@
+{
+  "overworld": {
+    "name": "Overworld",
+    "coordinates": {
+      "x": {
+        "min": 0,
+        "max": 1600
+      },
+      "y": {
+        "min": 0,
+        "max": 1312
+      }
+    },
+    "type": "route",
+    "encounterChance":20,
+    "pokemon": [
+      {
+        "speciesId": "eevee",
+        "percentSpawn": 60,
+        "levelRange": {
+          "min": 3,
+          "max": 6
+        }
+      },
+      {
+        "speciesId": "snorlax",
+        "percentSpawn": 40,
+        "levelRange": {
+          "min": 5,
+          "max": 8
+        }
+      }
+    ]
+  }
+}

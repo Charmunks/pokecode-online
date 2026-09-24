@@ -107,9 +107,7 @@
     "thunder-wave"(context) {
       if (context.phase === "after") status(context, context.defender, "paralyzed");
     },
-    "quick-attack"() {
-      // Turn order is deliberately governed only by Speed in this battle system.
-    },
+    "quick-attack": Object.assign(() => {}, { priority: true }),
     "double-team"(context) {
       if (context.phase === "after") stage(context, context.attacker, "EVASION", 1);
     },

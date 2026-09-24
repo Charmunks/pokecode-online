@@ -40,7 +40,9 @@
       maxHealth,
       health: Math.max(0, Math.min(maxHealth, data.health ?? maxHealth)),
       moves: data.moves.slice(0, 4),
-      sprite: species.battleSprite || species.mainSprite,
+      sprite: owned
+        ? species.battleSprite || species.mainSprite
+        : species.mainSprite || species.battleSprite,
       status: null,
       stages: { ATTACK: 0, DEFENSE: 0, SPA: 0, SPD: 0, SPEED: 0, ACCURACY: 0, EVASION: 0 },
       leechSeeded: false,
@@ -177,12 +179,22 @@
       };
       const ratio = pokemon.health / pokemon.maxHealth;
       const healthClass = ratio <= 0.2 ? "critical" : ratio <= 0.5 ? "low" : "";
-      root.querySelector(".battle-info").innerHTML = `
-        <div class="battle-name-line"><span></span><span>Lv. ${pokemon.level}</span></div>
-        <div class="battle-health-track"><div class="battle-health-fill ${healthClass}" style="width:${ratio * 100}%"></div></div>
-        <div class="battle-health-text">HP ${pokemon.health}/${pokemon.maxHealth}</div>
-        <div class="battle-status">${pokemon.status?.name || ""}</div>`;
-      root.querySelector(".battle-name-line span").textContent = pokemon.name;
+      const info = root.querySelector(".battle-info");
+      if (!info.querySelector(".battle-health-fill")) {
+        info.innerHTML = `
+          <div class="battle-name-line"><span class="battle-pokemon-name"></span><span class="battle-level"></span></div>
+          <div class="battle-health-track"><div class="battle-health-fill"></div></div>
+          <div class="battle-health-text"></div>
+          <div class="battle-status"></div>`;
+      }
+      info.querySelector(".battle-pokemon-name").textContent = pokemon.name;
+      info.querySelector(".battle-level").textContent = `Lv. ${pokemon.level}`;
+      const healthFill = info.querySelector(".battle-health-fill");
+      healthFill.className = `battle-health-fill ${healthClass}`;
+      healthFill.style.width = `${ratio * 100}%`;
+      info.querySelector(".battle-health-text").textContent =
+        `HP ${pokemon.health}/${pokemon.maxHealth}`;
+      info.querySelector(".battle-status").textContent = pokemon.status?.name || "";
     }
 
     render() {
@@ -291,8 +303,8 @@
       return Math.max(
         1,
         Math.floor(
-          (this.adjustedStat(attacker, attackStat) / this.adjustedStat(defender, defenseStat)) *
-            move.damage
+          ((this.adjustedStat(attacker, attackStat) /  this.adjustedStat(defender, defenseStat))*
+            move.damage * ((2 * attacker.level / 5) + 2)) / 50 + 2
         )
       );
     }
@@ -333,12 +345,36 @@
       return true;
     }
 
-    executeMove(attacker, defender, moveId) {
+    wait(milliseconds) {
+      return new Promise((resolve) => setTimeout(resolve, milliseconds));
+    }
+
+    animateAttack(attacker) {
+      const side = this.party.includes(attacker) ? "player" : "enemy";
+      const combatant = this.overlay.querySelector(`.battle-combatant.${side}`);
+      combatant.classList.remove("battle-attacking");
+      void combatant.offsetWidth;
+      combatant.classList.add("battle-attacking");
+      return new Promise((resolve) => {
+        let complete = false;
+        const finish = () => {
+          if (complete) return;
+          complete = true;
+          combatant.classList.remove("battle-attacking");
+          resolve();
+        };
+        combatant.addEventListener("animationend", finish, { once: true });
+        setTimeout(finish, 500);
+      });
+    }
+
+    async executeMove(attacker, defender, moveId) {
       const snoringWhileAsleep =
         moveId === "snore" && attacker.status?.name === "asleep";
       if (attacker.health <= 0 || !this.canAct(attacker, moveId)) return;
       const move = this.moves[moveId];
       this.log(`${attacker.name} used ${move.name}!`);
+      await this.animateAttack(attacker);
       const accuracy = Math.max(
         0.33,
         Math.min(1, stageMultiplier(attacker.stages.ACCURACY) / stageMultiplier(defender.stages.EVASION))
@@ -368,6 +404,8 @@
         return;
       }
 
+      const previousAttackerHealth = attacker.health;
+      const previousDefenderHealth = defender.health;
       if (move.damage > 0 && move.category !== "Status") {
         context.damage = Math.max(
           1,
@@ -391,6 +429,12 @@
         }
       }
       this.render();
+      if (
+        attacker.health !== previousAttackerHealth ||
+        defender.health !== previousDefenderHealth
+      ) {
+        await this.wait(700);
+      }
     }
 
     beginTurn() {
@@ -408,19 +452,25 @@
       const enemyMoveId = this.enemyMove();
       const playerSpeed = this.adjustedStat(this.player, "SPEED");
       const enemySpeed = this.adjustedStat(this.enemy, "SPEED");
-      const playerFirst = playerSpeed === enemySpeed ? this.random() < 0.5 : playerSpeed > enemySpeed;
+      const playerPriority = window.BattleMoveEffects[playerMoveId]?.priority === true;
+      const enemyPriority = window.BattleMoveEffects[enemyMoveId]?.priority === true;
+      const playerFirst = playerPriority !== enemyPriority
+        ? playerPriority
+        : playerSpeed === enemySpeed
+          ? this.random() < 0.5
+          : playerSpeed > enemySpeed;
       const actions = playerFirst
         ? [[this.player, this.enemy, playerMoveId], [this.enemy, this.player, enemyMoveId]]
         : [[this.enemy, this.player, enemyMoveId], [this.player, this.enemy, playerMoveId]];
       for (const action of actions) {
-        if (action[0].health > 0 && action[1].health > 0) this.executeMove(...action);
+        if (action[0].health > 0 && action[1].health > 0) await this.executeMove(...action);
       }
       await this.finishTurn();
     }
 
     async enemyResponse() {
       if (this.enemy.health > 0 && this.player.health > 0) {
-        this.executeMove(this.enemy, this.player, this.enemyMove());
+        await this.executeMove(this.enemy, this.player, this.enemyMove());
       }
       await this.finishTurn();
     }
@@ -449,9 +499,17 @@
     }
 
     async finishTurn() {
+      const previousPlayerHealth = this.player.health;
+      const previousEnemyHealth = this.enemy.health;
       this.endTurnEffect(this.player, this.enemy);
       this.endTurnEffect(this.enemy, this.player);
       this.render();
+      if (
+        this.player.health !== previousPlayerHealth ||
+        this.enemy.health !== previousEnemyHealth
+      ) {
+        await this.wait(700);
+      }
       if (this.enemy.health <= 0) {
         this.log(`${this.enemy.name} fainted!`);
         const nextEnemy = this.enemies.findIndex(
@@ -503,6 +561,7 @@
       this.busy = true;
       this.setControls([], false);
       this.beginTurn();
+      const previousTargetHealth = target?.health;
       const result = effect({
         type: this.options.type,
         target,
@@ -519,6 +578,9 @@
       owned.quantity -= 1;
       this.usedItems.set(itemId, (this.usedItems.get(itemId) || 0) + 1);
       this.render();
+      if (target && target.health !== previousTargetHealth) {
+        await this.wait(700);
+      }
       if (result.caught) {
         this.showCatchDestination();
         return;
