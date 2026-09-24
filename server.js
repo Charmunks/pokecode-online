@@ -77,6 +77,10 @@ app.get("/api/me", async (req, res) => {
     req.session = null;
     return res.json({ user: null });
   }
+  const pokemon = await knex("user_pokemon")
+    .where({ userId: user.id })
+    .select("id")
+    .first();
   res.json({
     user: {
       id: user.id,
@@ -88,6 +92,7 @@ app.get("/api/me", async (req, res) => {
       y: user.y,
       direction: user.direction,
       admin: user.admin,
+      needsStarter: !user.starterReceived && !pokemon,
     },
   });
 });
@@ -210,6 +215,10 @@ app.post("/api/setup", requireAuth, async (req, res) => {
   });
 
   const user = await knex("users").where({ id: req.session.userId }).first();
+  const pokemon = await knex("user_pokemon")
+    .where({ userId: user.id })
+    .select("id")
+    .first();
   res.json({
     user: {
       id: user.id,
@@ -221,6 +230,7 @@ app.post("/api/setup", requireAuth, async (req, res) => {
       y: user.y,
       direction: user.direction,
       admin: user.admin,
+      needsStarter: !user.starterReceived && !pokemon,
     },
   });
 });
@@ -252,6 +262,74 @@ function formatOwnedPokemon(row) {
     moves: Array.isArray(row.moves) ? row.moves : [],
   };
 }
+
+const STARTER_SPECIES = new Set([
+  "charmander",
+  "bulbasaur",
+  "squirtle",
+  "eevee",
+  "pikachu",
+]);
+
+// Give an eligible user their one-time level 5 starter.
+app.post("/api/starter", requireAuth, async (req, res) => {
+  const { speciesId } = req.body;
+  if (!STARTER_SPECIES.has(speciesId)) {
+    return res.status(400).json({ error: "Invalid starter Pokémon" });
+  }
+
+  try {
+    const pokemon = await knex.transaction(async (trx) => {
+      const user = await trx("users")
+        .where({ id: req.session.userId })
+        .forUpdate()
+        .first();
+
+      if (user.starterReceived) {
+        const err = new Error("Starter already received");
+        err.status = 409;
+        throw err;
+      }
+
+      const existingPokemon = await trx("user_pokemon")
+        .where({ userId: user.id })
+        .select("id")
+        .first();
+      if (existingPokemon) {
+        const err = new Error("You already have a Pokémon");
+        err.status = 409;
+        throw err;
+      }
+
+      const level = 5;
+      const [row] = await trx("user_pokemon")
+        .insert({
+          userId: user.id,
+          speciesId,
+          location: "party",
+          slot: 0,
+          level,
+          health: maxHealthForLevel(speciesId, level),
+          moves: JSON.stringify(knownMovesForLevel(speciesId, level)),
+        })
+        .returning("*");
+
+      await trx("users").where({ id: user.id }).update({
+        starterReceived: true,
+        updated_at: trx.fn.now(),
+      });
+
+      return row;
+    });
+
+    res.status(201).json({ pokemon: formatOwnedPokemon(pokemon) });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    throw err;
+  }
+});
 
 // Get the current user's Pokémon, split into party (max 6) and box
 app.get("/api/my-pokemon", requireAuth, async (req, res) => {

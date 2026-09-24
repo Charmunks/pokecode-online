@@ -1,4 +1,5 @@
 let selectedGender = "male";
+let selectedStarter = null;
 let currentUser = null;
 
 function selectGender(gender) {
@@ -40,7 +41,7 @@ async function submitSetup() {
     }
 
     currentUser = data.user;
-    launchGame();
+    continueToGame();
   } catch (err) {
     errorEl.textContent = "Connection error";
   }
@@ -49,6 +50,54 @@ async function submitSetup() {
 document.getElementById("setup-username").addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitSetup();
 });
+
+document.querySelectorAll(".starter-option").forEach((option) => {
+  option.addEventListener("click", () => {
+    selectedStarter = option.dataset.species;
+    document.querySelectorAll(".starter-option").forEach((candidate) => {
+      candidate.classList.toggle("selected", candidate === option);
+    });
+    document.getElementById("starter-confirm").disabled = false;
+    document.getElementById("starter-error").textContent = "";
+  });
+});
+
+document.getElementById("starter-confirm").addEventListener("click", async () => {
+  if (!selectedStarter) return;
+
+  const confirmButton = document.getElementById("starter-confirm");
+  const errorEl = document.getElementById("starter-error");
+  confirmButton.disabled = true;
+  errorEl.textContent = "";
+
+  try {
+    const res = await fetch("api/starter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ speciesId: selectedStarter }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errorEl.textContent = data.error || "Could not choose your starter";
+      confirmButton.disabled = false;
+      return;
+    }
+
+    currentUser.needsStarter = false;
+    launchGame();
+  } catch (err) {
+    errorEl.textContent = "Connection error";
+    confirmButton.disabled = false;
+  }
+});
+
+function continueToGame() {
+  if (currentUser.needsStarter) {
+    showScreen("starter-screen");
+  } else {
+    launchGame();
+  }
+}
 
 function launchGame() {
   showScreen(null);
@@ -68,7 +117,7 @@ async function init() {
       if (!currentUser.username) {
         showScreen("setup-screen");
       } else {
-        launchGame();
+        continueToGame();
       }
     } else {
       showScreen("login-screen");

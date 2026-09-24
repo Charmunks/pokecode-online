@@ -216,6 +216,49 @@
       width: 100vw;
       height: 100vh;
     }
+
+    .starter-box {
+      width: min(680px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+
+    .starter-select {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .starter-option {
+      min-width: 0;
+      padding: 10px 4px;
+      background: #fff;
+      border: 3px solid #383838;
+      color: #383838;
+      font: 7px 'Press Start 2P', monospace;
+      cursor: pointer;
+    }
+
+    .starter-option:hover,
+    .starter-option.selected {
+      border-color: #ec3750;
+      background: #fff0f2;
+      color: #ec3750;
+    }
+
+    .starter-option img {
+      display: block;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 8px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    @media (max-width: 620px) {
+      .starter-select { grid-template-columns: repeat(2, 1fr); }
+      .starter-box { padding: 24px 18px; }
+    }
   </style>
 </head>
 <body>
@@ -262,6 +305,35 @@
 
       <div id="setup-error" class="error-msg"></div>
       <button class="btn" onclick="submitSetup()">▶ JOIN WORLD</button>
+    </div>
+  </div>
+
+  <!-- Starter selection (shown once to eligible trainers) -->
+  <div id="starter-screen" class="screen hidden">
+    <div class="box starter-box">
+      <h1>CHOOSE A STARTER</h1>
+      <div class="pokeball-divider"><span></span></div>
+
+      <div class="starter-select">
+        <button class="starter-option" data-species="charmander" type="button">
+          <img src="assets/pokemon/charmander.png" alt="Charmander" />CHARMANDER
+        </button>
+        <button class="starter-option" data-species="bulbasaur" type="button">
+          <img src="assets/pokemon/bulbasaur.png" alt="Bulbasaur" />BULBASAUR
+        </button>
+        <button class="starter-option" data-species="squirtle" type="button">
+          <img src="assets/pokemon/squirtle.png" alt="Squirtle" />SQUIRTLE
+        </button>
+        <button class="starter-option" data-species="eevee" type="button">
+          <img src="assets/pokemon/eevee.png" alt="Eevee" />EEVEE
+        </button>
+        <button class="starter-option" data-species="pikachu" type="button">
+          <img src="assets/pokemon/pikachu.png" alt="Pikachu" />PIKACHU
+        </button>
+      </div>
+
+      <div id="starter-error" class="error-msg"></div>
+      <button id="starter-confirm" class="btn" type="button" disabled>▶ CHOOSE</button>
     </div>
   </div>
 
