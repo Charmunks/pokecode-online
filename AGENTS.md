@@ -18,8 +18,15 @@ pokecode/
 ├── public/
 │   ├── index.html         # Login screen + game container
 │   ├── js/
-│   │   ├── game.js        # Phaser game scene, networking, input
-│   │   └── generateSprites.js  # Placeholder sprite generators (unused, kept as reference)
+│   │   ├── onboarding.js  # Login/setup/starter screens; calls startGame() when done
+│   │   ├── game.js        # Phaser game scene, networking, input, encounters
+│   │   ├── render.js      # MAP_DATA, collision, tile + character sprite rendering
+│   │   ├── chat.js        # Chat UI and slash commands
+│   │   ├── playersMenu.js # TAB online players overlay
+│   │   ├── pokemonMenu.js # "1" menu: Pokémon, bag, shop, admin tools
+│   │   ├── battle.js      # Battle system (window.startBattle)
+│   │   ├── moveEffects.js # Move effect handlers
+│   │   └── itemEffects.js # Item effect handlers
 │   └── assets/
 │       ├── brendan.png    # Male character spritesheet (48x48 frames)
 │       ├── may.png        # Female character spritesheet (48x48 frames)
@@ -31,7 +38,7 @@ pokecode/
 ## Key Concepts
 
 ### Map System
-- Map is a 2D array in `game.js` (`MAP_DATA`), using tile IDs: 0=grass, 1=path, 2=water, 3=tree, 4=tallgrass
+- Map is a 2D array in `render.js` (`MAP_DATA`), using tile IDs: 0=grass, 1=path, 2=water, 3=tree, 4=tallgrass
 - Tiles are 32x32 pixels, loaded from `public/assets/tiles/`. Walkable tiles: grass (0), path (1), tallgrass (4)
 - To add new tile types: add a PNG to `public/assets/tiles/`, add a `this.load.image()` call in preload, add the ID to `MAP_DATA`, and update `WALKABLE` set if needed
 
@@ -59,7 +66,7 @@ pokecode/
 | `playerDisconnected` | Server → All | `socketId` |
 
 ### Collision
-- Tile-based collision check via `isWalkable()` in `game.js`
+- Tile-based collision check via `isWalkable()` in `render.js`
 - Checks player foot hitbox corners against the tile grid
 
 ### Pokémon System
@@ -68,7 +75,7 @@ pokecode/
 - Owned Pokémon are stored per-user in the `user_pokemon` table: `speciesId`, optional `nickname`, `location` (`party` or `box`), `slot` for ordering, `level` (defaults to 1), and `friendship` (defaults to 50)
 - Party is capped at 6 in the UI; box has no limit. There is currently no way for a user to obtain a Pokémon — rows must be inserted directly for now
 - `GET /api/my-pokemon` (auth required) returns `{ party: [...], box: [...] }` for the current user
-- Client fetches species + owned data in `game.js` and shows them in a DOM overlay menu (`pokemon-menu-overlay`) when the player presses `1`; `Escape` or `1` again closes it. Movement is frozen while the menu is open, same as chat
+- Client fetches species data in `game.js` and owned data in `pokemonMenu.js`, and shows them in a DOM overlay menu (`pokemon-menu-overlay`) when the player presses `1`; `Escape` or `1` again closes it. Movement is frozen while the menu is open, same as chat
 
 ### Currency
 - Two currencies are stored as integer columns on `users`: `pokedollars` and `watts` (both default 0)
