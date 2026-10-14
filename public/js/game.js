@@ -57,6 +57,101 @@ function startGame(user) {
   let lastSentDir = "down";
   let lastSentMoving = false;
   let lastStepChunk = null;
+  let touchedBuilding = null;
+  let buildingOpen = false;
+  let blackoutOpen = false;
+
+  async function enterBuilding(building) {
+    buildingOpen = true;
+    try {
+      await building.onEnter({
+        building,
+        user,
+        gameData,
+        appendChatMessage: chat.appendMessage,
+      });
+    } catch (error) {
+      console.error(`Could not enter building ${building.id}:`, error);
+    } finally {
+      buildingOpen = false;
+    }
+  }
+
+  // Full-screen "blacked out" notice; resolves when the player dismisses it.
+  function showBlackoutScreen(pokemartName) {
+    return new Promise((resolve) => {
+      const screen = document.createElement("div");
+      screen.style.cssText =
+        "position:fixed;inset:0;z-index:400;background:#000;color:#f8f8f0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:24px;padding:24px;text-align:center;font-family:'Press Start 2P',monospace;cursor:pointer;";
+
+      const title = document.createElement("h2");
+      title.textContent = "YOU BLACKED OUT!";
+      title.style.cssText = "font-size:16px;margin:0;color:#ec3750;";
+
+      const message = document.createElement("p");
+      message.textContent = `You scurried back to the ${pokemartName}...`;
+      message.style.cssText = "font-size:10px;line-height:1.8;margin:0;";
+
+      const hint = document.createElement("p");
+      hint.textContent = "Press ENTER or click to continue";
+      hint.style.cssText = "font-size:7px;margin:0;color:#a0a0a0;";
+
+      function onKeyDown(e) {
+        if (e.repeat || !["Enter", " ", "Escape"].includes(e.key)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+
+      function close() {
+        document.removeEventListener("keydown", onKeyDown, true);
+        screen.remove();
+        resolve();
+      }
+
+      screen.addEventListener("click", close);
+      screen.appendChild(title);
+      screen.appendChild(message);
+      screen.appendChild(hint);
+      document.body.appendChild(screen);
+      document.addEventListener("keydown", onKeyDown, true);
+    });
+  }
+
+  function teleportPlayer({ x, y }, direction) {
+    playerSprite.body.reset(x, y);
+    nameText.setPosition(x, y - 20);
+    playerSprite.scene.cameras.main.centerOn(x, y);
+    player.direction = direction;
+    playerSprite.anims.play(`${gender}-idle-${direction}`, true);
+    lastStepChunk = null;
+    socket.emit("playerMove", { x, y, direction, moving: false });
+    lastSentX = x;
+    lastSentY = y;
+    lastSentDir = direction;
+    lastSentMoving = false;
+  }
+
+  // If every party Pokémon has fainted, send the player back to their last Pokémart.
+  async function checkBlackout() {
+    blackoutOpen = true;
+    try {
+      const res = await fetch("api/my-pokemon");
+      if (!res.ok) return;
+      const { party } = await res.json();
+      if (!party.length || party.some((pokemon) => pokemon.health > 0)) return;
+
+      const pokemart = respawnPokemart(user.lastPokemartId);
+      if (!pokemart) return;
+      const screenClosed = showBlackoutScreen(pokemart.name);
+      teleportPlayer(buildingDoorstep(pokemart), "down");
+      await screenClosed;
+    } catch (error) {
+      console.error("Could not check for blackout:", error);
+    } finally {
+      blackoutOpen = false;
+    }
+  }
 
   async function tryWildEncounter(x, y) {
     const area = Object.values(gameData.areas).find(({ coordinates }) =>
@@ -112,6 +207,7 @@ function startGame(user) {
 
   function preload() {
     preloadRenderAssets(this);
+    preloadBuildingAssets(this);
   }
 
   function getOnlinePlayers() {
@@ -135,6 +231,7 @@ function startGame(user) {
 
   function create() {
     renderMap(this);
+    renderBuildings(this);
     createCharacterAnimations(this);
 
     ({ sprite: playerSprite, nameText } = createPlayerSprite(this, user));
@@ -239,7 +336,7 @@ function startGame(user) {
       if (e.key === "Tab") {
         e.preventDefault();
         if (e.repeat) return;
-        if (chat.isOpen() || battleOpen) return;
+        if (chat.isOpen() || battleOpen || buildingOpen || blackoutOpen) return;
         playersMenu.toggle();
         return;
       }
@@ -257,7 +354,15 @@ function startGame(user) {
         }
       }
 
-      if (chat.isOpen() || battleOpen || playersMenu.isOpen()) return;
+      if (
+        chat.isOpen() ||
+        battleOpen ||
+        buildingOpen ||
+        blackoutOpen ||
+        playersMenu.isOpen()
+      ) {
+        return;
+      }
 
       if (e.key === "t" || e.key === "T") {
         e.preventDefault();
@@ -276,6 +381,7 @@ function startGame(user) {
     });
     window.addEventListener("battle:end", () => {
       battleOpen = false;
+      checkBlackout();
     });
 
     Promise.all([
@@ -310,6 +416,8 @@ function startGame(user) {
       pokemonMenu.isOpen() ||
       playersMenu.isOpen() ||
       battleOpen ||
+      buildingOpen ||
+      blackoutOpen ||
       encounterPending
     ) {
       playerSprite.setVelocity(0, 0);
@@ -368,6 +476,19 @@ function startGame(user) {
         }
       }
     }
+
+    // Trigger a building's entrance once each time the player walks into it.
+    const building = moving
+      ? findBuildingEntrance(footX + Math.sign(vx) * step, footY + Math.sign(vy) * step)
+      : null;
+    if (building && building !== touchedBuilding) {
+      touchedBuilding = building;
+      playerSprite.setVelocity(0, 0);
+      playerSprite.anims.play(`${gender}-idle-${direction}`, true);
+      enterBuilding(building);
+      return;
+    }
+    touchedBuilding = building;
 
     if (vx !== 0 && !canMove(footX + Math.sign(vx) * step, footY)) {
       vx = 0;

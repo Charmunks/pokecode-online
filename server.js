@@ -92,6 +92,7 @@ app.get("/api/me", async (req, res) => {
       y: user.y,
       direction: user.direction,
       admin: user.admin,
+      lastPokemartId: user.lastPokemartId,
       needsStarter: !user.starterReceived && !pokemon,
     },
   });
@@ -230,6 +231,7 @@ app.post("/api/setup", requireAuth, async (req, res) => {
       y: user.y,
       direction: user.direction,
       admin: user.admin,
+      lastPokemartId: user.lastPokemartId,
       needsStarter: !user.starterReceived && !pokemon,
     },
   });
@@ -341,6 +343,35 @@ app.get("/api/my-pokemon", requireAuth, async (req, res) => {
     party: rows.filter((r) => r.location === "party").map(formatOwnedPokemon),
     box: rows.filter((r) => r.location === "box").map(formatOwnedPokemon),
   });
+});
+
+// Restore every Pokémon in the current user's party to full health and remember
+// the Pokémart they healed at (where they return to after blacking out).
+app.post("/api/my-pokemon/heal-party", requireAuth, async (req, res) => {
+  const pokemartId = req.body?.pokemartId;
+  if (typeof pokemartId !== "string" || !pokemartId || pokemartId.length > 255) {
+    return res.status(400).json({ error: "Invalid Pokémart" });
+  }
+
+  const party = await knex.transaction(async (trx) => {
+    await trx("users")
+      .where({ id: req.session.userId })
+      .update({ lastPokemartId: pokemartId, updated_at: trx.fn.now() });
+
+    const rows = await trx("user_pokemon")
+      .where({ userId: req.session.userId, location: "party" })
+      .orderBy("slot", "asc")
+      .forUpdate();
+    for (const pokemon of rows) {
+      pokemon.health = maxHealthForLevel(pokemon.speciesId, pokemon.level);
+      await trx("user_pokemon")
+        .where({ id: pokemon.id, userId: req.session.userId })
+        .update({ health: pokemon.health, updated_at: trx.fn.now() });
+    }
+    return rows;
+  });
+
+  res.json({ party: party.map(formatOwnedPokemon) });
 });
 
 // Update the four moves known by one of the current user's Pokémon.

@@ -21,6 +21,7 @@ pokecode/
 │   │   ├── onboarding.js  # Login/setup/starter screens; calls startGame() when done
 │   │   ├── game.js        # Phaser game scene, networking, input, encounters
 │   │   ├── render.js      # MAP_DATA, collision, tile + character sprite rendering
+│   │   ├── buildings.js   # BUILDINGS definitions, building collision/entrances/rendering
 │   │   ├── chat.js        # Chat UI and slash commands
 │   │   ├── playersMenu.js # TAB online players overlay
 │   │   ├── pokemonMenu.js # "1" menu: Pokémon, bag, shop, admin tools
@@ -47,6 +48,14 @@ pokecode/
 - **treetree**: When a tree tile (3) has another tree tile (3) directly below it, the upper tree renders with `treetree.png` instead of `tree.png`
 - **grasstree**: When a grass tile (0) has a tree tile (3) directly below it, the grass renders with `grasstree.png` instead of `grass.png`
 - **Path-tree spacing**: Path tiles (1) must never be placed directly above a tree tile (3) in `MAP_DATA` — there must be at least one non-path tile between them vertically
+
+### Buildings
+- Defined in the `BUILDINGS` array in `buildings.js`. Each entry has a unique `id`, `name`, `type`, `sprite` (image path), `position` (top-left tile), `size` (`width`/`height` in tiles), `entrance` (tile rect relative to the building's top-left; `width`/`height` default to 1) and `onEnter(context)`
+- The sprite is stretched to cover `size` tiles. The whole footprint is solid (`isWalkable()` returns false for it); walking into the entrance calls `onEnter({ building, user, gameData, appendChatMessage })` once per contact
+- Keep the `MAP_DATA` tiles under a building as grass (0), and keep the tile below the entrance walkable (players respawn there after blacking out)
+- **Pokémarts**: add one with `pokemart({ id, name, x, y })` in `BUILDINGS` (4×4 tiles, x/y = top-left tile). The default one is `northeast-pokemart` in the top-right corner (tiles 45–48, rows 1–4). The door (bottom row, tile 1) asks "Do you want to heal your Pokémon?" via `showChoiceDialog()`; on YES it calls `POST /api/my-pokemon/heal-party` with `{ pokemartId }`, which restores every party Pokémon to max health and saves the id to `users.lastPokemartId`
+- **Blacking out**: after every battle (`battle:end`), if all party Pokémon have 0 health, `checkBlackout()` in `game.js` shows a "YOU BLACKED OUT!" screen and teleports the player in front of their last-used Pokémart (or the first Pokémart in `BUILDINGS` if they haven't used one). It does not heal the party
+- `showChoiceDialog(message, choices)` in `buildings.js` shows a text box with buttons and resolves with the chosen string (Escape picks the last choice)
 
 ### Character Sprites
 - Spritesheets are 4×4 grids of 48×48 frames (192×192 total)
