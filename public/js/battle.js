@@ -110,6 +110,14 @@
         "Trainer battles require trainer name, sprite, dialogue, and an onVictory function."
       );
     }
+    if (
+      options.prizeMoney !== undefined &&
+      (options.type !== "trainer" ||
+        !Number.isInteger(options.prizeMoney) ||
+        options.prizeMoney < 0)
+    ) {
+      throw new Error("Only trainer battles can award prize money, as a non-negative whole number.");
+    }
     options.enemyPokemon.forEach((pokemon) => {
       const speciesId = pokemon?.species;
       if (
@@ -308,13 +316,13 @@
     }
 
     chooseItem(itemId) {
-      if (["potion", "antidote"].includes(itemId)) {
+      if (["potion", "antidote", "revive"].includes(itemId)) {
         const buttons = this.party.map((pokemon) =>
           this.button(
             pokemon.name,
             () => this.itemTurn(itemId, pokemon),
             `HP ${pokemon.health}/${pokemon.maxHealth}${pokemon.status ? ` · ${pokemon.status.name}` : ""}`,
-            pokemon.health <= 0
+            itemId === "revive" ? pokemon.health > 0 : pokemon.health <= 0
           )
         );
         buttons.push(this.button("BACK", () => this.showBag()));
@@ -893,7 +901,7 @@
       await this.finish("ran", "GOT AWAY SAFELY");
     }
 
-    async save() {
+    async save(prizeMoney) {
       const response = await fetch("api/battle/results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -901,6 +909,7 @@
           health: this.party.map((pokemon) => ({ id: pokemon.id, health: pokemon.health })),
           usedItems: Array.from(this.usedItems, ([itemId, quantity]) => ({ itemId, quantity })),
           caughtPokemon: this.caughtPokemon,
+          prizeMoney,
         }),
       });
       const data = await response.json();
@@ -912,6 +921,10 @@
       this.finished = true;
       this.busy = true;
       this.log(title);
+      const prizeMoney = result === "victory" ? this.options.prizeMoney || 0 : 0;
+      if (prizeMoney > 0) {
+        this.log(`You got ${prizeMoney.toLocaleString()} Pokédollars for winning!`);
+      }
       const resultScreen = document.createElement("div");
       resultScreen.className = "battle-result";
       resultScreen.textContent = title;
@@ -920,7 +933,7 @@
         continueButton.disabled = true;
         try {
           if (!this.saved) {
-            await this.save();
+            await this.save(prizeMoney);
             this.saved = true;
           }
           if (

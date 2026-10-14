@@ -70,6 +70,16 @@ pokecode/
 - `GET /api/my-pokemon` (auth required) returns `{ party: [...], box: [...] }` for the current user
 - Client fetches species + owned data in `game.js` and shows them in a DOM overlay menu (`pokemon-menu-overlay`) when the player presses `1`; `Escape` or `1` again closes it. Movement is frozen while the menu is open, same as chat
 
+### Currency
+- Two currencies are stored as integer columns on `users`: `pokedollars` and `watts` (both default 0)
+- `GET /api/my-currency` (auth required) returns `{ pokedollars, watts }`; balances are shown at the top of the `1` menu
+- Trainer battles can pass `prizeMoney` (non-negative integer) to `startBattle()`; on victory it is sent with `POST /api/battle/results` and added to `pokedollars`
+- There is currently no way to earn watts
+
+### Shop
+- Items in `public/data/items.json` with `shopPrice` (integer) and `shopType` (`pokedollars` or `watts`) are sold in the SHOP tab of the `1` menu, grouped by currency. Items without these fields are not sold
+- `POST /api/shop/buy` (auth required) takes `{ itemId, quantity }` (1–99), deducts the cost from the matching currency column, adds the items to `user_items`, and returns `{ item, currency }`
+
 ## How to Replace Placeholder Sprites with Real Ones
 
 Real spritesheets are already in place (`brendan.png`, `may.png` at 48×48 frames, and 32×32 tile PNGs in `assets/tiles/`). To update them:

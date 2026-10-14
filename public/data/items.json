@@ -3,7 +3,9 @@
     "name": "Potion",
     "description": "Restores 20 HP to one Pokémon.",
     "type": "Medicine",
-    "battleUsable": true
+    "battleUsable": true,
+    "shopPrice": 300,
+    "shopType": "pokedollars"
   },
   "antidote": {
     "name": "Full Heal",
@@ -11,11 +13,29 @@
     "type": "Medicine",
     "battleUsable": true
   },
+  "revive": {
+    "name": "Revive",
+    "description": "Revives a fainted Pokémon, restoring half its max HP.",
+    "type": "Medicine",
+    "battleUsable": true,
+    "shopPrice": 1500,
+    "shopType": "pokedollars"
+  },
+  "rare-candy": {
+    "name": "Rare Candy",
+    "description": "A candy packed with energy. Raises a Pokémon's level by one.",
+    "type": "Medicine",
+    "battleUsable": false,
+    "shopPrice": 50,
+    "shopType": "watts"
+  },
   "poke-ball": {
     "name": "Pokeball",
     "description": "A device for catching wild Pokémon.",
     "type": "Balls",
-    "battleUsable": true
+    "battleUsable": true,
+    "shopPrice": 200,
+    "shopType": "pokedollars"
   },
   "escape-rope": {
     "name": "Escape Rope",

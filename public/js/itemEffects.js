@@ -9,6 +9,14 @@
       target.health += restored;
       return { used: true, message: `${target.name} restored ${restored} HP!` };
     },
+    revive(context) {
+      const target = context.target;
+      if (!target || target.health > 0) {
+        return { used: false, message: "Revive would have no effect." };
+      }
+      target.health = Math.max(1, Math.floor(target.maxHealth / 2));
+      return { used: true, message: `${target.name} was revived!` };
+    },
     antidote(context) {
       const target = context.target;
       if (!target?.status) {

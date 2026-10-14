@@ -193,6 +193,7 @@ function startGame(user) {
   const maxChatMessages = 50;
   let chatFadeTimer = null;
   let pokemonMenuOpen = false;
+  let playersMenuOpen = false;
   let battleOpen = false;
   let speciesData = {};
   let movesData = {};
@@ -200,6 +201,7 @@ function startGame(user) {
   let areaData = {};
   let myPokemon = { party: [], box: [] };
   let myItems = [];
+  let myCurrency = { pokedollars: 0, watts: 0 };
   let selectedItemType = null;
   let encounterPending = false;
 
@@ -422,10 +424,12 @@ function startGame(user) {
           addOtherPlayer(this, p);
         }
       });
+      if (playersMenuOpen) renderPlayersMenu();
     });
 
     socket.on("playerJoined", (p) => {
       addOtherPlayer(this, p);
+      if (playersMenuOpen) renderPlayersMenu();
     });
 
     socket.on("playerMoved", (data) => {
@@ -454,6 +458,7 @@ function startGame(user) {
         otherPlayers[id].nameText.destroy();
         delete otherPlayers[id];
       }
+      if (playersMenuOpen) renderPlayersMenu();
     });
 
     // ─── Chat UI ───
@@ -490,6 +495,34 @@ function startGame(user) {
     chatContainer.appendChild(chatInputWrap);
     document.body.appendChild(chatContainer);
 
+    function getOnlinePlayers() {
+      const list = [
+        {
+          id: socket.id || "self",
+          name: name,
+          gender: gender,
+          isSelf: true,
+        },
+      ];
+      const others = Object.values(otherPlayers).map((p) => ({
+        id: p.id,
+        name: p.name || (p.nameText ? p.nameText.text : "Unknown"),
+        gender: p.gender,
+        isSelf: false,
+      }));
+      others.sort((a, b) => a.name.localeCompare(b.name));
+      return list.concat(others);
+    }
+
+    function sendPlayersListChat() {
+      const players = getOnlinePlayers();
+      const names = players.map((p) => p.name);
+      appendChatMessage({
+        message: `Players online (${players.length}): ${names.join(", ")}`,
+        type: "system",
+      });
+    }
+
     const chatCommands = {
       mute: () => {
         chatMuted = !chatMuted;
@@ -497,6 +530,15 @@ function startGame(user) {
           message: chatMuted ? "Chat muted." : "Chat unmuted.",
           type: "system",
         });
+      },
+      list: () => {
+        sendPlayersListChat();
+      },
+      players: () => {
+        sendPlayersListChat();
+      },
+      who: () => {
+        sendPlayersListChat();
       },
     };
 
@@ -539,6 +581,7 @@ function startGame(user) {
     }
 
     function openChat() {
+      if (playersMenuOpen) closePlayersMenu();
       chatOpen = true;
       clearTimeout(chatFadeTimer);
       chatLog.style.transition = "none";
@@ -591,11 +634,35 @@ function startGame(user) {
         sendChat();
       } else if (e.key === "Escape") {
         closeChat();
+      } else if (e.key === "Tab") {
+        e.preventDefault();
       }
     });
 
     document.addEventListener("keydown", (e) => {
-      if (chatOpen || battleOpen) return;
+      if (e.key === "Tab") {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (chatOpen || battleOpen) return;
+        togglePlayersMenu();
+        return;
+      }
+
+      if (e.key === "Escape") {
+        if (playersMenuOpen) {
+          e.preventDefault();
+          closePlayersMenu();
+          return;
+        }
+        if (pokemonMenuOpen) {
+          e.preventDefault();
+          closePokemonMenu();
+          return;
+        }
+      }
+
+      if (chatOpen || battleOpen || playersMenuOpen) return;
+
       if (e.key === "t" || e.key === "T") {
         if (document.activeElement === chatInput) return;
         e.preventDefault();
@@ -603,8 +670,6 @@ function startGame(user) {
       } else if (e.key === "1") {
         e.preventDefault();
         togglePokemonMenu();
-      } else if (e.key === "Escape" && pokemonMenuOpen) {
-        closePokemonMenu();
       }
     });
 
@@ -616,11 +681,148 @@ function startGame(user) {
     window.addEventListener("battle:start", () => {
       battleOpen = true;
       if (pokemonMenuOpen) closePokemonMenu();
+      if (playersMenuOpen) closePlayersMenu();
       if (chatOpen) closeChat();
     });
     window.addEventListener("battle:end", () => {
       battleOpen = false;
     });
+
+    // ─── Online Players menu ───
+    const playersOverlay = document.createElement("div");
+    playersOverlay.id = "players-menu-overlay";
+    playersOverlay.style.cssText =
+      "display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;justify-content:center;align-items:center;font-family:'Press Start 2P',monospace;";
+
+    const playersPanel = document.createElement("div");
+    playersPanel.style.cssText =
+      "background:#f8f8f0;border:4px solid #383838;padding:20px;width:440px;max-width:90vw;max-height:80vh;overflow-y:auto;color:#383838;box-shadow:0 0 0 4px #f8f8f0;position:relative;";
+
+    const playersHeader = document.createElement("div");
+    playersHeader.style.cssText =
+      "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
+
+    const playersTitle = document.createElement("h2");
+    playersTitle.style.cssText =
+      "font-size:12px;letter-spacing:1px;color:#383838;margin:0;";
+
+    const playersCloseBtn = document.createElement("button");
+    playersCloseBtn.type = "button";
+    playersCloseBtn.textContent = "✕";
+    playersCloseBtn.style.cssText =
+      "background:#ec3750;color:#fff;border:2px solid #383838;padding:4px 8px;font-family:'Press Start 2P',monospace;font-size:9px;cursor:pointer;";
+    playersCloseBtn.addEventListener("click", () => closePlayersMenu());
+
+    playersHeader.appendChild(playersTitle);
+    playersHeader.appendChild(playersCloseBtn);
+
+    const playersDivider = document.createElement("div");
+    playersDivider.style.cssText =
+      "height:2px;background:#a0a0a0;margin-bottom:16px;";
+
+    const playersListEl = document.createElement("div");
+    playersListEl.id = "players-online-list";
+    playersListEl.style.cssText =
+      "display:flex;flex-direction:column;gap:8px;";
+
+    const playersFooter = document.createElement("div");
+    playersFooter.style.cssText =
+      "margin-top:16px;text-align:center;font-size:7px;color:#787878;letter-spacing:1px;";
+    playersFooter.textContent = "Press TAB or ESC to close";
+
+    playersPanel.appendChild(playersHeader);
+    playersPanel.appendChild(playersDivider);
+    playersPanel.appendChild(playersListEl);
+    playersPanel.appendChild(playersFooter);
+    playersOverlay.appendChild(playersPanel);
+    document.body.appendChild(playersOverlay);
+
+    playersOverlay.addEventListener("click", (e) => {
+      if (e.target === playersOverlay) {
+        closePlayersMenu();
+      }
+    });
+
+    function renderPlayersMenu() {
+      const players = getOnlinePlayers();
+      playersTitle.textContent = `ONLINE PLAYERS (${players.length})`;
+      playersListEl.innerHTML = "";
+
+      players.forEach((p) => {
+        const item = document.createElement("div");
+        item.style.cssText =
+          `display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:2px solid #383838;background:${p.isSelf ? "#fff0f2" : "#fff"};`;
+
+        const leftSide = document.createElement("div");
+        leftSide.style.cssText = "display:flex;align-items:center;gap:12px;";
+
+        const iconWrapper = document.createElement("div");
+        iconWrapper.style.cssText =
+          "width:32px;height:32px;overflow:hidden;position:relative;background:#e8e8e0;border:2px solid #383838;flex-shrink:0;";
+
+        const icon = document.createElement("img");
+        icon.src = p.gender === "female" ? "assets/may.png" : "assets/brendan.png";
+        icon.alt = p.name;
+        icon.style.cssText =
+          "width:48px;height:48px;object-fit:none;object-position:0 0;image-rendering:pixelated;transform:scale(0.6667);transform-origin:0 0;display:block;";
+        iconWrapper.appendChild(icon);
+
+        const info = document.createElement("div");
+        const nameRow = document.createElement("div");
+        nameRow.style.cssText =
+          `font-size:9px;color:${p.isSelf ? "#ec3750" : "#383838"};display:flex;align-items:center;gap:6px;`;
+        nameRow.textContent = p.name;
+
+        if (p.isSelf) {
+          const youTag = document.createElement("span");
+          youTag.textContent = "YOU";
+          youTag.style.cssText =
+            "font-size:6px;color:#fff;background:#ec3750;padding:2px 4px;border:1px solid #383838;";
+          nameRow.appendChild(youTag);
+        }
+
+        const subText = document.createElement("div");
+        subText.style.cssText = "font-size:7px;color:#787878;margin-top:4px;";
+        subText.textContent = p.gender = "Trainer"; 
+
+        info.appendChild(nameRow);
+        info.appendChild(subText);
+
+        leftSide.appendChild(iconWrapper);
+        leftSide.appendChild(info);
+
+        const statusTag = document.createElement("div");
+        statusTag.style.cssText =
+          "font-size:7px;color:#27ae60;display:flex;align-items:center;gap:4px;flex-shrink:0;";
+        statusTag.innerHTML = `<span style="font-size:9px;line-height:1;">●</span> ONLINE`;
+
+        item.appendChild(leftSide);
+        item.appendChild(statusTag);
+
+        playersListEl.appendChild(item);
+      });
+    }
+
+    function openPlayersMenu() {
+      if (pokemonMenuOpen) closePokemonMenu();
+      if (chatOpen) closeChat();
+      playersMenuOpen = true;
+      renderPlayersMenu();
+      playersOverlay.style.display = "flex";
+    }
+
+    function closePlayersMenu() {
+      playersMenuOpen = false;
+      playersOverlay.style.display = "none";
+    }
+
+    function togglePlayersMenu() {
+      if (playersMenuOpen) {
+        closePlayersMenu();
+      } else {
+        openPlayersMenu();
+      }
+    }
 
     // ─── Pokémon menu ───
     const pokemonOverlay = document.createElement("div");
@@ -651,6 +853,12 @@ function startGame(user) {
     bagMenuButton.style.cssText =
       "padding:9px 12px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
 
+    const shopMenuButton = document.createElement("button");
+    shopMenuButton.type = "button";
+    shopMenuButton.textContent = "SHOP";
+    shopMenuButton.style.cssText =
+      "padding:9px 12px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
     const testBattleButton = document.createElement("button");
     testBattleButton.type = "button";
     testBattleButton.textContent = "TEST BATTLE";
@@ -659,7 +867,34 @@ function startGame(user) {
 
     menuNavigation.appendChild(pokemonMenuButton);
     menuNavigation.appendChild(bagMenuButton);
+    menuNavigation.appendChild(shopMenuButton);
     menuNavigation.appendChild(testBattleButton);
+
+    const currencyBar = document.createElement("div");
+    currencyBar.style.cssText =
+      "display:flex;gap:8px;margin-bottom:16px;font-size:8px;";
+
+    function currencyBox(label, color) {
+      const box = document.createElement("div");
+      box.style.cssText =
+        "flex:1;display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border:2px solid #383838;background:#fff;";
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      labelEl.style.color = color;
+      const valueEl = document.createElement("span");
+      box.appendChild(labelEl);
+      box.appendChild(valueEl);
+      currencyBar.appendChild(box);
+      return valueEl;
+    }
+
+    const pokedollarsValue = currencyBox("POKÉDOLLARS", "#ec3750");
+    const wattsValue = currencyBox("WATTS", "#338eda");
+
+    function renderCurrency() {
+      pokedollarsValue.textContent = myCurrency.pokedollars.toLocaleString();
+      wattsValue.textContent = myCurrency.watts.toLocaleString();
+    }
 
     const pokemonListView = document.createElement("div");
 
@@ -773,6 +1008,7 @@ function startGame(user) {
     bagView.appendChild(bagHint);
 
     pokemonPanel.appendChild(menuNavigation);
+    pokemonPanel.appendChild(currencyBar);
     pokemonPanel.appendChild(pokemonTitle);
     pokemonListView.appendChild(partyLabel);
     pokemonListView.appendChild(partyGrid);
@@ -783,6 +1019,23 @@ function startGame(user) {
     pokemonPanel.appendChild(pokemonListView);
     pokemonPanel.appendChild(pokemonSummary);
     pokemonPanel.appendChild(bagView);
+
+    const shopView = document.createElement("div");
+    shopView.style.display = "none";
+
+    const shopList = document.createElement("div");
+
+    const shopMessage = document.createElement("div");
+    shopMessage.style.cssText = "min-height:12px;margin-top:8px;font-size:7px;color:#585858;";
+
+    const shopHint = document.createElement("div");
+    shopHint.textContent = "Press 1 or ESC to close";
+    shopHint.style.cssText = "font-size:8px;color:#585858;margin-top:20px;text-align:center;";
+
+    shopView.appendChild(shopList);
+    shopView.appendChild(shopMessage);
+    shopView.appendChild(shopHint);
+    pokemonPanel.appendChild(shopView);
     pokemonOverlay.appendChild(pokemonPanel);
     document.body.appendChild(pokemonOverlay);
 
@@ -1278,15 +1531,19 @@ function startGame(user) {
       }
     }
 
+    function showMenuTab(title, view, button) {
+      pokemonTitle.textContent = title;
+      [pokemonListView, pokemonSummary, bagView, shopView].forEach((tabView) => {
+        tabView.style.display = tabView === view ? "block" : "none";
+      });
+      [pokemonMenuButton, bagMenuButton, shopMenuButton].forEach((tabButton) => {
+        tabButton.style.background = tabButton === button ? "#ec3750" : "#fff";
+        tabButton.style.color = tabButton === button ? "#fff" : "#383838";
+      });
+    }
+
     function renderPokemonMenu() {
-      pokemonTitle.textContent = "YOUR POKÉMON";
-      bagView.style.display = "none";
-      pokemonSummary.style.display = "none";
-      pokemonListView.style.display = "block";
-      pokemonMenuButton.style.background = "#ec3750";
-      pokemonMenuButton.style.color = "#fff";
-      bagMenuButton.style.background = "#fff";
-      bagMenuButton.style.color = "#383838";
+      showMenuTab("YOUR POKÉMON", pokemonListView, pokemonMenuButton);
       partyLabel.textContent = `PARTY (${myPokemon.party.length}/6)`;
       partyGrid.innerHTML = "";
       for (let i = 0; i < 6; i++) {
@@ -1313,14 +1570,7 @@ function startGame(user) {
     }
 
     function renderBag() {
-      pokemonTitle.textContent = "YOUR BAG";
-      pokemonListView.style.display = "none";
-      pokemonSummary.style.display = "none";
-      bagView.style.display = "block";
-      pokemonMenuButton.style.background = "#fff";
-      pokemonMenuButton.style.color = "#383838";
-      bagMenuButton.style.background = "#ec3750";
-      bagMenuButton.style.color = "#fff";
+      showMenuTab("YOUR BAG", bagView, bagMenuButton);
 
       const ownedTypes = Array.from(
         new Set(
@@ -1389,6 +1639,120 @@ function startGame(user) {
       itemAdminControls.style.display = user.admin ? "block" : "none";
     }
 
+    function renderShop() {
+      showMenuTab("SHOP", shopView, shopMenuButton);
+      shopList.innerHTML = "";
+
+      [
+        { shopType: "pokedollars", label: "POKÉDOLLAR ITEMS", currency: "P$" },
+        { shopType: "watts", label: "WATT ITEMS", currency: "W" },
+      ].forEach(({ shopType, label, currency }) => {
+        const sectionLabel = document.createElement("div");
+        sectionLabel.textContent = label;
+        sectionLabel.style.cssText = "font-size:9px;color:#ec3750;margin:0 0 8px;";
+        const section = document.createElement("div");
+        section.style.cssText = "display:grid;gap:8px;margin-bottom:20px;";
+        shopList.appendChild(sectionLabel);
+        shopList.appendChild(section);
+
+        const shopItems = Object.entries(itemData)
+          .filter(([, item]) => item.shopType === shopType && Number.isInteger(item.shopPrice))
+          .sort(([, a], [, b]) => a.shopPrice - b.shopPrice);
+
+        if (shopItems.length === 0) {
+          const empty = document.createElement("div");
+          empty.textContent = "Nothing for sale.";
+          empty.style.cssText = "font-size:8px;color:#585858;";
+          section.appendChild(empty);
+          return;
+        }
+
+        shopItems.forEach(([itemId, item]) => {
+          const row = document.createElement("div");
+          row.style.cssText =
+            "display:grid;grid-template-columns:minmax(110px,1fr) 2fr auto auto auto;gap:10px;align-items:center;background:#fff;border:2px solid #c0c0c0;padding:12px;";
+
+          const itemName = document.createElement("div");
+          itemName.textContent = item.name;
+          itemName.style.cssText = "font-size:9px;line-height:1.5;";
+
+          const itemDescription = document.createElement("div");
+          itemDescription.textContent = item.description;
+          itemDescription.style.cssText = "font-size:7px;color:#585858;line-height:1.7;";
+
+          const price = document.createElement("div");
+          price.textContent = `${currency}${item.shopPrice.toLocaleString()}`;
+          price.style.cssText = `font-size:9px;color:${shopType === "watts" ? "#338eda" : "#ec3750"};`;
+
+          const quantityInput = document.createElement("input");
+          quantityInput.type = "number";
+          quantityInput.min = "1";
+          quantityInput.max = "99";
+          quantityInput.value = "1";
+          quantityInput.setAttribute("aria-label", `${item.name} quantity`);
+          quantityInput.style.cssText =
+            "width:55px;padding:6px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+          const buyButton = document.createElement("button");
+          buyButton.type = "button";
+          buyButton.textContent = "BUY";
+          buyButton.style.cssText =
+            "padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+          buyButton.addEventListener("click", () =>
+            buyItem(itemId, Number(quantityInput.value), buyButton)
+          );
+
+          row.appendChild(itemName);
+          row.appendChild(itemDescription);
+          row.appendChild(price);
+          row.appendChild(quantityInput);
+          row.appendChild(buyButton);
+          section.appendChild(row);
+        });
+      });
+    }
+
+    async function buyItem(itemId, quantity, buyButton) {
+      const item = itemData[itemId];
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+        shopMessage.style.color = "#ec3750";
+        shopMessage.textContent = "Choose a quantity from 1 to 99.";
+        return;
+      }
+      if (myCurrency[item.shopType] < item.shopPrice * quantity) {
+        shopMessage.style.color = "#ec3750";
+        shopMessage.textContent = `Not enough ${item.shopType === "watts" ? "Watts" : "Pokédollars"}.`;
+        return;
+      }
+
+      buyButton.disabled = true;
+      shopMessage.style.color = "#585858";
+      shopMessage.textContent = "Buying...";
+      try {
+        const res = await fetch("api/shop/buy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId, quantity }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          shopMessage.style.color = "#ec3750";
+          shopMessage.textContent = data.error || "Could not buy item.";
+          return;
+        }
+        myCurrency = data.currency;
+        renderCurrency();
+        await loadMyItems();
+        shopMessage.style.color = "#198754";
+        shopMessage.textContent = `Bought ${quantity} ${item.name}.`;
+      } catch (err) {
+        shopMessage.style.color = "#ec3750";
+        shopMessage.textContent = "Connection error.";
+      } finally {
+        buyButton.disabled = false;
+      }
+    }
+
     function populateSpeciesSelect() {
       speciesSelect.innerHTML = "";
       Object.entries(speciesData)
@@ -1415,6 +1779,10 @@ function startGame(user) {
 
     pokemonMenuButton.addEventListener("click", renderPokemonMenu);
     bagMenuButton.addEventListener("click", renderBag);
+    shopMenuButton.addEventListener("click", () => {
+      shopMessage.textContent = "";
+      renderShop();
+    });
     testBattleButton.addEventListener("click", async () => {
       if (testBattleButton.disabled || !speciesData.charmander) return;
       testBattleButton.disabled = true;
@@ -1548,9 +1916,22 @@ function startGame(user) {
       }
     }
 
+    async function loadMyCurrency() {
+      try {
+        const res = await fetch("api/my-currency");
+        if (res.ok) {
+          myCurrency = await res.json();
+        }
+      } catch (err) {
+        // Keep the previous balances if they cannot be refreshed.
+      }
+    }
+
     async function openPokemonMenu() {
+      if (playersMenuOpen) closePlayersMenu();
       pokemonMenuOpen = true;
-      await Promise.all([loadMyPokemon(), loadMyItems()]);
+      await Promise.all([loadMyPokemon(), loadMyItems(), loadMyCurrency()]);
+      renderCurrency();
       renderPokemonMenu();
       pokemonOverlay.style.display = "flex";
     }
@@ -1589,6 +1970,11 @@ function startGame(user) {
   }
 
   function addOtherPlayer(scene, data) {
+    if (otherPlayers[data.id]) {
+      otherPlayers[data.id].sprite.destroy();
+      otherPlayers[data.id].nameText.destroy();
+    }
+
     const sprite = scene.add.sprite(data.x, data.y, data.gender);
     sprite.setScale(24 / 48);
     sprite.setDepth(10);
@@ -1608,6 +1994,8 @@ function startGame(user) {
     sprite.anims.play(`${data.gender}-idle-${data.direction || "down"}`, true);
 
     otherPlayers[data.id] = {
+      id: data.id,
+      name: data.name,
       sprite,
       nameText: label,
       gender: data.gender,
@@ -1641,7 +2029,7 @@ function startGame(user) {
     let direction = player.direction;
     let moving = false;
 
-    if (chatOpen || pokemonMenuOpen || battleOpen || encounterPending) {
+    if (chatOpen || pokemonMenuOpen || playersMenuOpen || battleOpen || encounterPending) {
       playerSprite.setVelocity(0, 0);
       playerSprite.anims.play(`${gender}-idle-${direction}`, true);
       nameText.setPosition(playerSprite.x, playerSprite.y - 20);

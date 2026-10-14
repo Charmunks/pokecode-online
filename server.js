@@ -517,6 +517,75 @@ app.get("/api/my-items", requireAuth, async (req, res) => {
   });
 });
 
+// Get the current user's currency balances.
+app.get("/api/my-currency", requireAuth, async (req, res) => {
+  const user = await knex("users")
+    .where({ id: req.session.userId })
+    .select("pokedollars", "watts")
+    .first();
+  res.json({ pokedollars: user.pokedollars, watts: user.watts });
+});
+
+// Buy items listed in items.json with a shopPrice, paid in their shopType currency.
+app.post("/api/shop/buy", requireAuth, async (req, res) => {
+  const { itemId } = req.body;
+  const quantity = Number(req.body?.quantity ?? 1);
+  const item = itemData[itemId];
+  if (
+    typeof itemId !== "string" ||
+    !Number.isInteger(item?.shopPrice) ||
+    !["pokedollars", "watts"].includes(item.shopType)
+  ) {
+    return res.status(400).json({ error: "That item is not for sale" });
+  }
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+    return res.status(400).json({ error: "Quantity must be a whole number from 1 to 99" });
+  }
+
+  const cost = item.shopPrice * quantity;
+  try {
+    const result = await knex.transaction(async (trx) => {
+      const user = await trx("users")
+        .where({ id: req.session.userId })
+        .forUpdate()
+        .first();
+      if (user[item.shopType] < cost) {
+        const error = new Error(
+          `Not enough ${item.shopType === "watts" ? "Watts" : "Pokédollars"}`
+        );
+        error.status = 409;
+        throw error;
+      }
+
+      const [balances] = await trx("users")
+        .where({ id: user.id })
+        .update({
+          [item.shopType]: user[item.shopType] - cost,
+          updated_at: trx.fn.now(),
+        })
+        .returning(["pokedollars", "watts"]);
+
+      const [ownedItem] = await trx("user_items")
+        .insert({ userId: user.id, itemId, quantity })
+        .onConflict(["userId", "itemId"])
+        .merge({
+          quantity: trx.raw("user_items.quantity + ?", [quantity]),
+          updated_at: trx.fn.now(),
+        })
+        .returning(["itemId", "quantity"]);
+
+      return { item: ownedItem, currency: balances };
+    });
+
+    res.json(result);
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    throw error;
+  }
+});
+
 // Admins can add one or more items to their own bag.
 app.post("/api/my-items", requireAuth, requireAdmin, async (req, res) => {
   const { itemId } = req.body;
@@ -545,7 +614,13 @@ app.post("/api/battle/results", requireAuth, async (req, res) => {
   const health = req.body?.health;
   const usedItems = req.body?.usedItems;
   const caughtPokemon = req.body?.caughtPokemon || null;
-  if (!Array.isArray(health) || !Array.isArray(usedItems)) {
+  const prizeMoney = Number(req.body?.prizeMoney ?? 0);
+  if (
+    !Array.isArray(health) ||
+    !Array.isArray(usedItems) ||
+    !Number.isInteger(prizeMoney) ||
+    prizeMoney < 0
+  ) {
     return res.status(400).json({ error: "Invalid battle results" });
   }
 
@@ -606,6 +681,15 @@ app.post("/api/battle/results", requireAuth, async (req, res) => {
             .where({ id: item.id })
             .update({ quantity: item.quantity - quantity, updated_at: trx.fn.now() });
         }
+      }
+
+      if (prizeMoney > 0) {
+        await trx("users")
+          .where({ id: req.session.userId })
+          .update({
+            pokedollars: trx.raw("users.pokedollars + ?", [prizeMoney]),
+            updated_at: trx.fn.now(),
+          });
       }
 
       if (!caughtPokemon) return null;
@@ -723,6 +807,17 @@ io.on("connection", (socket) => {
 
     const message = data.message.trim().slice(0, 200);
     if (!message) return;
+
+    if (message.toLowerCase() === "/list") {
+      const playerList = Object.values(players).map((p) => p.name);
+      socket.emit("chatMessage", {
+        username: "System",
+        message: `Players online (${playerList.length}): ${playerList.join(", ")}`,
+        type: "system",
+        timestamp: Date.now(),
+      });
+      return;
+    }
 
     const msg = {
       username: player.name,
