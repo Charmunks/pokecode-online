@@ -16,7 +16,7 @@
     "pokemon": [
       {
         "speciesId": "eevee",
-        "percentSpawn": 60,
+        "percentSpawn": 80,
         "levelRange": {
           "min": 3,
           "max": 6
@@ -24,7 +24,7 @@
       },
       {
         "speciesId": "snorlax",
-        "percentSpawn": 40,
+        "percentSpawn": 20,
         "levelRange": {
           "min": 5,
           "max": 8

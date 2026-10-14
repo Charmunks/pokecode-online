@@ -295,11 +295,12 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     const selectedMoves = new Set(
       (mon.moves || []).filter((moveId) => availableMoves.includes(moveId)).slice(0, 4)
     );
+    const requiredMoveCount = Math.min(4, availableMoves.length);
 
     pokemonSummary.innerHTML = "";
 
     const heading = document.createElement("div");
-    heading.textContent = "CHOOSE 4 MOVES";
+    heading.textContent = `CHOOSE ${requiredMoveCount} MOVES`;
     heading.style.cssText = "font-size:11px;color:#ec3750;margin-bottom:8px;";
 
     const instructions = document.createElement("div");
@@ -329,8 +330,9 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     message.style.cssText = "min-height:12px;margin-top:10px;font-size:7px;color:#ec3750;";
 
     function updateMovePicker() {
-      instructions.textContent = `${selectedMoves.size}/4 selected. Select exactly four moves.`;
-      saveButton.disabled = selectedMoves.size !== 4;
+      instructions.textContent =
+        `${selectedMoves.size}/${requiredMoveCount} selected. Select exactly ${requiredMoveCount} moves.`;
+      saveButton.disabled = selectedMoves.size !== requiredMoveCount;
       saveButton.style.background = saveButton.disabled ? "#a0a0a0" : "#ec3750";
       saveButton.style.cursor = saveButton.disabled ? "not-allowed" : "pointer";
     }
@@ -365,7 +367,7 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     });
 
     saveButton.addEventListener("click", async () => {
-      if (selectedMoves.size !== 4) return;
+      if (selectedMoves.size !== requiredMoveCount) return;
       saveButton.disabled = true;
       message.style.color = "#585858";
       message.textContent = "Saving...";
@@ -444,6 +446,7 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
       species.name || mon.speciesId,
       `Lv. ${mon.level}`,
       `Health: ${mon.health}/${stats.HP}`,
+      mon.expToNextLevel ? `EXP: ${mon.exp}/${mon.expToNextLevel}` : "EXP: MAX",
       `Friendship: ${mon.friendship}`,
     ].forEach((detail) => {
       const line = document.createElement("div");
@@ -704,7 +707,7 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     pokemonSummary.appendChild(movesLabel);
     pokemonSummary.appendChild(movesList);
 
-    if (learnableMoves(mon).length > 4) {
+    if (learnableMoves(mon).length > (mon.moves || []).length) {
       const chooseMovesButton = document.createElement("button");
       chooseMovesButton.type = "button";
       chooseMovesButton.textContent = "CHOOSE MOVES";

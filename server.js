@@ -8,6 +8,7 @@ const cookieSession = require("cookie-session");
 const pokemonData = require("./public/data/pokemon.json");
 const itemData = require("./public/data/items.json");
 const moveData = require("./public/data/moves.json");
+const areaData = require("./public/data/area.json");
 
 const app = express();
 const httpServer = createServer(app);
@@ -94,6 +95,7 @@ app.get("/api/me", async (req, res) => {
       admin: user.admin,
       lastPokemartId: user.lastPokemartId,
       needsStarter: !user.starterReceived && !pokemon,
+      impersonating: Boolean(req.session.impersonatorId),
     },
   });
 });
@@ -233,6 +235,7 @@ app.post("/api/setup", requireAuth, async (req, res) => {
       admin: user.admin,
       lastPokemartId: user.lastPokemartId,
       needsStarter: !user.starterReceived && !pokemon,
+      impersonating: Boolean(req.session.impersonatorId),
     },
   });
 });
@@ -252,6 +255,16 @@ function maxHealthForLevel(speciesId, level) {
   return Math.floor((baseHp * 2 * level) / 100) + level + 10;
 }
 
+// EXP needed to go from `level` to `level + 1`.
+function expToLevelUp(speciesId, level) {
+  return Math.max(1, Math.ceil(level * 0.2 * pokemonData[speciesId].stats.EXPRATE));
+}
+
+// EXP dropped by a defeated wild Pokémon found in `area`.
+function wildExpReward(area, level) {
+  return Math.max(1, Math.floor(level * area.encounterChance * 0.25));
+}
+
 function formatOwnedPokemon(row) {
   return {
     id: row.id,
@@ -260,6 +273,9 @@ function formatOwnedPokemon(row) {
     level: row.level,
     health: row.health,
     friendship: row.friendship,
+    location: row.location,
+    exp: row.exp,
+    expToNextLevel: row.level < 100 ? expToLevelUp(row.speciesId, row.level) : null,
     slot: row.slot,
     moves: Array.isArray(row.moves) ? row.moves : [],
   };
@@ -390,10 +406,11 @@ app.patch("/api/my-pokemon/:id/moves", requireAuth, async (req, res) => {
   }
 
   const learnableMoves = learnableMovesForLevel(pokemon.speciesId, pokemon.level);
-  const requiredMoveCount = Math.min(4, learnableMoves.length);
   const uniqueMoves = new Set(selectedMoves);
+  // Fewer than four is allowed so players can decline moves offered on level up.
   const isValidSelection =
-    selectedMoves.length === requiredMoveCount &&
+    selectedMoves.length >= 1 &&
+    selectedMoves.length <= 4 &&
     uniqueMoves.size === selectedMoves.length &&
     selectedMoves.every(
       (moveId) => typeof moveId === "string" && learnableMoves.includes(moveId)
@@ -401,7 +418,7 @@ app.patch("/api/my-pokemon/:id/moves", requireAuth, async (req, res) => {
 
   if (!isValidSelection) {
     return res.status(400).json({
-      error: `Choose exactly ${requiredMoveCount} moves this Pokémon can learn`,
+      error: "Choose 1 to 4 moves this Pokémon can learn",
     });
   }
 
@@ -429,7 +446,7 @@ app.patch("/api/my-pokemon/:id/level", requireAuth, requireAdmin, async (req, re
 
   const [updatedPokemon] = await knex("user_pokemon")
     .where({ id: pokemonId, userId: req.session.userId })
-    .update({ level, updated_at: knex.fn.now() })
+    .update({ level, exp: 0, updated_at: knex.fn.now() })
     .returning("*");
   if (!updatedPokemon) {
     return res.status(404).json({ error: "Pokémon not found" });
@@ -640,23 +657,339 @@ app.post("/api/my-items", requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json({ item });
 });
 
+// ─── Admin dashboard ───
+
+function parseId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+// Lowest free party slot, or the slot after the last box Pokémon.
+async function nextFreeSlot(trx, userId, location) {
+  const rows = await trx("user_pokemon").where({ userId, location }).select("slot");
+  if (location === "box") {
+    return rows.reduce((max, row) => Math.max(max, row.slot + 1), 0);
+  }
+  if (rows.length >= 6) {
+    throw httpError(409, "That party is full");
+  }
+  const usedSlots = new Set(rows.map((row) => row.slot));
+  let slot = 0;
+  while (usedSlots.has(slot)) slot++;
+  return slot;
+}
+
+function onlineUserIds() {
+  return new Set(Object.values(activeSockets).map(Number));
+}
+
+// List every account.
+app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  const users = await knex("users")
+    .leftJoin("user_pokemon", "users.id", "user_pokemon.userId")
+    .groupBy("users.id")
+    .orderBy("users.id", "asc")
+    .select(
+      "users.id",
+      "users.username",
+      "users.email",
+      "users.slackId",
+      "users.gender",
+      "users.admin",
+      "users.pokedollars",
+      "users.watts",
+      "users.created_at"
+    )
+    .count("user_pokemon.id as pokemonCount");
+  const online = onlineUserIds();
+
+  res.json({
+    users: users.map((user) => ({
+      ...user,
+      pokemonCount: Number(user.pokemonCount),
+      online: online.has(user.id),
+    })),
+  });
+});
+
+// Full details for one account: Pokémon, items and recent chat history.
+app.get("/api/admin/users/:userId", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  if (!userId) return res.status(400).json({ error: "Invalid user" });
+
+  const user = await knex("users").where({ id: userId }).first();
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const [pokemon, items, chat] = await Promise.all([
+    knex("user_pokemon").where({ userId }).orderBy("slot", "asc"),
+    knex("user_items").where({ userId }).orderBy("itemId", "asc"),
+    knex("chat_messages")
+      .where({ userId })
+      .orderBy("created_at", "desc")
+      .limit(200)
+      .select("id", "message", "type", "created_at"),
+  ]);
+
+  res.json({
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      slackId: user.slackId,
+      gender: user.gender,
+      admin: user.admin,
+      pokedollars: user.pokedollars,
+      watts: user.watts,
+      created_at: user.created_at,
+      online: onlineUserIds().has(user.id),
+    },
+    party: pokemon.filter((r) => r.location === "party").map(formatOwnedPokemon),
+    box: pokemon.filter((r) => r.location === "box").map(formatOwnedPokemon),
+    items: items.map((row) => ({ itemId: row.itemId, quantity: row.quantity })),
+    chat,
+  });
+});
+
+// Give a user a Pokémon.
+app.post("/api/admin/users/:userId/pokemon", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  const { speciesId } = req.body ?? {};
+  const level = Number(req.body?.level ?? 1);
+  const location = req.body?.location === "box" ? "box" : "party";
+  if (!userId) return res.status(400).json({ error: "Invalid user" });
+  if (typeof speciesId !== "string" || !pokemonData[speciesId]) {
+    return res.status(400).json({ error: "Invalid Pokémon species" });
+  }
+  if (!Number.isInteger(level) || level < 1 || level > 100) {
+    return res.status(400).json({ error: "Level must be a whole number from 1 to 100" });
+  }
+
+  try {
+    const pokemon = await knex.transaction(async (trx) => {
+      const user = await trx("users").where({ id: userId }).forUpdate().first();
+      if (!user) throw httpError(404, "User not found");
+
+      const slot = await nextFreeSlot(trx, userId, location);
+      const [row] = await trx("user_pokemon")
+        .insert({
+          userId,
+          speciesId,
+          location,
+          slot,
+          level,
+          health: maxHealthForLevel(speciesId, level),
+          moves: JSON.stringify(knownMovesForLevel(speciesId, level)),
+        })
+        .returning("*");
+      return row;
+    });
+    res.status(201).json({ pokemon: formatOwnedPokemon(pokemon) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// Edit a user's Pokémon. Accepts any of nickname, level, health, friendship, location.
+app.patch("/api/admin/users/:userId/pokemon/:id", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  const pokemonId = parseId(req.params.id);
+  if (!userId || !pokemonId) return res.status(400).json({ error: "Invalid Pokémon" });
+  const body = req.body ?? {};
+
+  try {
+    const pokemon = await knex.transaction(async (trx) => {
+      await trx("users").where({ id: userId }).forUpdate().first();
+      const row = await trx("user_pokemon").where({ id: pokemonId, userId }).first();
+      if (!row) throw httpError(404, "Pokémon not found");
+
+      const changes = {};
+
+      if ("nickname" in body) {
+        const nickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
+        if (nickname.length > 20) throw httpError(400, "Nickname must be 20 characters or fewer");
+        changes.nickname = nickname || null;
+      }
+
+      let level = row.level;
+      if ("level" in body) {
+        level = Number(body.level);
+        if (!Number.isInteger(level) || level < 1 || level > 100) {
+          throw httpError(400, "Level must be a whole number from 1 to 100");
+        }
+        if (level !== row.level) {
+          changes.level = level;
+          changes.exp = 0;
+        }
+      }
+
+      const maxHealth = maxHealthForLevel(row.speciesId, level);
+      if ("health" in body) {
+        const health = Number(body.health);
+        if (!Number.isInteger(health) || health < 0 || health > maxHealth) {
+          throw httpError(400, `Health must be a whole number from 0 to ${maxHealth}`);
+        }
+        changes.health = health;
+      } else if (row.health > maxHealth) {
+        changes.health = maxHealth;
+      }
+
+      if ("friendship" in body) {
+        const friendship = Number(body.friendship);
+        if (!Number.isInteger(friendship) || friendship < 0 || friendship > 255) {
+          throw httpError(400, "Friendship must be a whole number from 0 to 255");
+        }
+        changes.friendship = friendship;
+      }
+
+      if ("location" in body && body.location !== row.location) {
+        if (body.location !== "party" && body.location !== "box") {
+          throw httpError(400, "Location must be party or box");
+        }
+        changes.location = body.location;
+        changes.slot = await nextFreeSlot(trx, userId, body.location);
+      }
+
+      if (!Object.keys(changes).length) return row;
+      const [updated] = await trx("user_pokemon")
+        .where({ id: pokemonId, userId })
+        .update({ ...changes, updated_at: trx.fn.now() })
+        .returning("*");
+      return updated;
+    });
+    res.json({ pokemon: formatOwnedPokemon(pokemon) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// Delete a user's Pokémon.
+app.delete("/api/admin/users/:userId/pokemon/:id", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  const pokemonId = parseId(req.params.id);
+  if (!userId || !pokemonId) return res.status(400).json({ error: "Invalid Pokémon" });
+
+  const deleted = await knex("user_pokemon").where({ id: pokemonId, userId }).del();
+  if (!deleted) return res.status(404).json({ error: "Pokémon not found" });
+  res.json({ ok: true });
+});
+
+// Set how many of an item a user has. A quantity of 0 removes it.
+app.put("/api/admin/users/:userId/items/:itemId", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  const { itemId } = req.params;
+  const quantity = Number(req.body?.quantity);
+  if (!userId) return res.status(400).json({ error: "Invalid user" });
+  if (!itemData[itemId]) return res.status(400).json({ error: "Invalid item" });
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 999) {
+    return res.status(400).json({ error: "Quantity must be a whole number from 0 to 999" });
+  }
+
+  const user = await knex("users").where({ id: userId }).first();
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  if (quantity === 0) {
+    await knex("user_items").where({ userId, itemId }).del();
+    return res.json({ item: { itemId, quantity: 0 } });
+  }
+
+  const [item] = await knex("user_items")
+    .insert({ userId, itemId, quantity })
+    .onConflict(["userId", "itemId"])
+    .merge({ quantity, updated_at: knex.fn.now() })
+    .returning(["itemId", "quantity"]);
+  res.json({ item });
+});
+
+// Permanently delete an account and everything it owns.
+app.delete("/api/admin/users/:userId", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  if (!userId) return res.status(400).json({ error: "Invalid user" });
+  if (userId === req.session.userId) {
+    return res.status(400).json({ error: "You cannot delete your own account" });
+  }
+
+  const deleted = await knex.transaction(async (trx) => {
+    await trx("chat_messages").where({ userId }).del();
+    await trx("user_items").where({ userId }).del();
+    await trx("user_pokemon").where({ userId }).del();
+    return trx("users").where({ id: userId }).del();
+  });
+  if (!deleted) return res.status(404).json({ error: "User not found" });
+
+  // Kick the deleted user out of the game if they are online.
+  for (const [socketId, socketUserId] of Object.entries(activeSockets)) {
+    if (Number(socketUserId) !== userId) continue;
+    const socket = io.sockets.sockets.get(socketId);
+    if (socket) {
+      socket.emit("forceLogout");
+      socket.disconnect(true);
+    }
+  }
+
+  res.json({ ok: true });
+});
+
+// Log in as another user. The admin's id is kept so they can switch back.
+app.post("/api/admin/users/:userId/impersonate", requireAuth, requireAdmin, async (req, res) => {
+  const userId = parseId(req.params.userId);
+  if (!userId) return res.status(400).json({ error: "Invalid user" });
+  if (userId === req.session.userId) {
+    return res.status(400).json({ error: "You are already this user" });
+  }
+
+  const user = await knex("users").where({ id: userId }).first();
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  req.session.impersonatorId = req.session.impersonatorId || req.session.userId;
+  req.session.userId = userId;
+  res.json({ ok: true });
+});
+
+// Return to the admin account that started impersonating.
+app.post("/api/admin/stop-impersonating", requireAuth, async (req, res) => {
+  const impersonatorId = req.session.impersonatorId;
+  if (!impersonatorId) {
+    return res.status(400).json({ error: "You are not impersonating anyone" });
+  }
+
+  const admin = await knex("users").where({ id: impersonatorId }).first();
+  if (!admin?.admin) {
+    req.session = null;
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  req.session.userId = impersonatorId;
+  req.session.impersonatorId = null;
+  res.json({ ok: true });
+});
+
 // Persist the player-owned state produced by a completed battle.
 app.post("/api/battle/results", requireAuth, async (req, res) => {
   const health = req.body?.health;
   const usedItems = req.body?.usedItems;
   const caughtPokemon = req.body?.caughtPokemon || null;
+  const defeatedWild = req.body?.defeatedWild || null;
   const prizeMoney = Number(req.body?.prizeMoney ?? 0);
   if (
     !Array.isArray(health) ||
     !Array.isArray(usedItems) ||
     !Number.isInteger(prizeMoney) ||
-    prizeMoney < 0
+    prizeMoney < 0 ||
+    (defeatedWild && caughtPokemon)
   ) {
     return res.status(400).json({ error: "Invalid battle results" });
   }
 
   try {
-    const caught = await knex.transaction(async (trx) => {
+    const result = await knex.transaction(async (trx) => {
       const party = await trx("user_pokemon")
         .where({ userId: req.session.userId, location: "party" })
         .orderBy("slot", "asc")
@@ -682,6 +1015,7 @@ app.post("/api/battle/results", requireAuth, async (req, res) => {
         await trx("user_pokemon")
           .where({ id: pokemon.id, userId: req.session.userId })
           .update({ health: value, updated_at: trx.fn.now() });
+        pokemon.health = value;
       }
 
       const itemTotals = new Map();
@@ -723,7 +1057,57 @@ app.post("/api/battle/results", requireAuth, async (req, res) => {
           });
       }
 
-      if (!caughtPokemon) return null;
+      let expGain = null;
+      if (defeatedWild) {
+        const area = areaData[defeatedWild.areaId];
+        const wildLevel = Number(defeatedWild.level);
+        const encounter = area?.pokemon.find(
+          (candidate) => candidate.speciesId === defeatedWild.speciesId
+        );
+        const pokemon = partyById.get(Number(defeatedWild.pokemonId));
+        if (
+          !encounter ||
+          !Number.isInteger(wildLevel) ||
+          wildLevel < encounter.levelRange.min ||
+          wildLevel > encounter.levelRange.max ||
+          !pokemon
+        ) {
+          const error = new Error("Invalid defeated Pokémon");
+          error.status = 400;
+          throw error;
+        }
+
+        const exp = wildExpReward(area, wildLevel);
+        const startLevel = pokemon.level;
+        let level = pokemon.level;
+        let totalExp = pokemon.exp + exp;
+        while (level < 100 && totalExp >= expToLevelUp(pokemon.speciesId, level)) {
+          totalExp -= expToLevelUp(pokemon.speciesId, level);
+          level++;
+        }
+        if (level === 100) totalExp = 0;
+
+        // Leveling up raises max health; keep the same amount of missing health.
+        const healthGained =
+          maxHealthForLevel(pokemon.speciesId, level) -
+          maxHealthForLevel(pokemon.speciesId, startLevel);
+        const [updatedPokemon] = await trx("user_pokemon")
+          .where({ id: pokemon.id, userId: req.session.userId })
+          .update({
+            level,
+            exp: totalExp,
+            health: pokemon.health > 0 ? pokemon.health + healthGained : 0,
+            updated_at: trx.fn.now(),
+          })
+          .returning("*");
+        expGain = {
+          exp,
+          levelsGained: level - startLevel,
+          pokemon: formatOwnedPokemon(updatedPokemon),
+        };
+      }
+
+      if (!caughtPokemon) return { caught: null, expGain };
       const { speciesId, destination } = caughtPokemon;
       const level = Number(caughtPokemon.level);
       const caughtHealth = Number(caughtPokemon.health);
@@ -770,10 +1154,10 @@ app.post("/api/battle/results", requireAuth, async (req, res) => {
           moves: JSON.stringify(moves),
         })
         .returning("*");
-      return formatOwnedPokemon(newPokemon);
+      return { caught: formatOwnedPokemon(newPokemon), expGain };
     });
 
-    res.json({ ok: true, caughtPokemon: caught });
+    res.json({ ok: true, caughtPokemon: result.caught, expGain: result.expGain });
   } catch (error) {
     if (error.status) {
       return res.status(error.status).json({ error: error.message });

@@ -25,6 +25,7 @@ pokecode/
 │   │   ├── chat.js        # Chat UI and slash commands
 │   │   ├── playersMenu.js # TAB online players overlay
 │   │   ├── pokemonMenu.js # "1" menu: Pokémon, bag, shop, admin tools
+│   │   ├── adminDashboard.js # "9" admin dashboard: accounts, editing, impersonation
 │   │   ├── battle.js      # Battle system (window.startBattle)
 │   │   ├── moveEffects.js # Move effect handlers
 │   │   └── itemEffects.js # Item effect handlers
@@ -54,7 +55,7 @@ pokecode/
 - The sprite is stretched to cover `size` tiles. The whole footprint is solid (`isWalkable()` returns false for it); walking into the entrance calls `onEnter({ building, user, gameData, appendChatMessage })` once per contact
 - Keep the `MAP_DATA` tiles under a building as grass (0), and keep the tile below the entrance walkable (players respawn there after blacking out)
 - **Pokémarts**: add one with `pokemart({ id, name, x, y })` in `BUILDINGS` (4×4 tiles, x/y = top-left tile). The default one is `northeast-pokemart` in the top-right corner (tiles 45–48, rows 1–4). The door (bottom row, tile 1) asks "Do you want to heal your Pokémon?" via `showChoiceDialog()`; on YES it calls `POST /api/my-pokemon/heal-party` with `{ pokemartId }`, which restores every party Pokémon to max health and saves the id to `users.lastPokemartId`
-- **Blacking out**: after every battle (`battle:end`), if all party Pokémon have 0 health, `checkBlackout()` in `game.js` shows a "YOU BLACKED OUT!" screen and teleports the player in front of their last-used Pokémart (or the first Pokémart in `BUILDINGS` if they haven't used one). It does not heal the party
+- **Blacking out**: after every battle (`battle:end`), if all party Pokémon have 0 health, `checkBlackout()` in `game.js` shows a "YOU BLACKED OUT!" screen and teleports the player in front of their last-used Pokémart (or the first Pokémart in `BUILDINGS` if they haven't used one), then heals the party via `POST /api/my-pokemon/heal-party`
 - `showChoiceDialog(message, choices)` in `buildings.js` shows a text box with buttons and resolves with the chosen string (Escape picks the last choice)
 
 ### Character Sprites
@@ -82,6 +83,7 @@ pokecode/
 - Species data lives in `public/data/pokemon.json`, served statically at `/data/pokemon.json`. Each entry has `name`, `mainSprite`, `battleSprite`, and a `stats` object with `HP`, `ATTACK`, `SPA`, `SPD`, `SPEED`, `DEFENSE`, `EXPRATE`
 - Sprite paths point at `public/assets/pokemon/<id>.png` and `<id>_battle.png` — these image files don't exist yet; add real sprites there using the species id as the filename. The client falls back to a generated placeholder (colored square + initial) if a sprite fails to load
 - Owned Pokémon are stored per-user in the `user_pokemon` table: `speciesId`, optional `nickname`, `location` (`party` or `box`), `slot` for ordering, `level` (defaults to 1), and `friendship` (defaults to 50)
+- **Experience**: `user_pokemon.exp` holds EXP toward the next level. Leveling from `level` to `level + 1` needs `ceil(level * 0.2 * EXPRATE)` EXP (`expToLevelUp()` in `server.js`). Defeating a wild Pokémon gives the active party Pokémon `floor(wildLevel * area.encounterChance * 0.25)` EXP (`wildExpReward()`). The client sends `defeatedWild: { areaId, speciesId, level, pokemonId }` to `POST /api/battle/results`; the server checks it against `area.json`, computes the EXP, applies any level-ups (max health rises with level) and returns `expGain`. `Battle.awardExp()` in `battle.js` saves the results as soon as the last wild Pokémon faints, animates the player's EXP bar (using a client copy of `expToLevelUp()`), and for each move learned at a new level shows a `popup()` asking to learn it (and which move to forget if four are known). Changed moves are saved via `PATCH /api/my-pokemon/:id/moves`, which accepts 1–4 learnable moves. The win screen shows afterwards. The admin level editor resets `exp` to 0
 - Party is capped at 6 in the UI; box has no limit. There is currently no way for a user to obtain a Pokémon — rows must be inserted directly for now
 - `GET /api/my-pokemon` (auth required) returns `{ party: [...], box: [...] }` for the current user
 - Client fetches species data in `game.js` and owned data in `pokemonMenu.js`, and shows them in a DOM overlay menu (`pokemon-menu-overlay`) when the player presses `1`; `Escape` or `1` again closes it. Movement is frozen while the menu is open, same as chat
@@ -91,6 +93,12 @@ pokecode/
 - `GET /api/my-currency` (auth required) returns `{ pokedollars, watts }`; balances are shown at the top of the `1` menu
 - Trainer battles can pass `prizeMoney` (non-negative integer) to `startBattle()`; on victory it is sent with `POST /api/battle/results` and added to `pokedollars`
 - There is currently no way to earn watts
+
+### Admin Dashboard
+- Admins (`users.admin`) press `9` to open `createAdminDashboard()` in `adminDashboard.js`; `Escape` or `9` closes it. It lists every account (`GET /api/admin/users`) and clicking one loads its Pokémon, items and last 200 chat messages (`GET /api/admin/users/:userId`)
+- Editing: `POST /api/admin/users/:userId/pokemon` (`{ speciesId, level, location }`), `PATCH /api/admin/users/:userId/pokemon/:id` (any of `nickname`, `level`, `health`, `friendship`, `location`), `DELETE /api/admin/users/:userId/pokemon/:id`, and `PUT /api/admin/users/:userId/items/:itemId` (`{ quantity }`, 0 removes the item)
+- `DELETE /api/admin/users/:userId` deletes the account with its Pokémon, items and chat messages, and sends `forceLogout` to its open sockets. Admins cannot delete themselves
+- `POST /api/admin/users/:userId/impersonate` switches the session to that user and stores the admin's id in `req.session.impersonatorId`; `/api/me` then returns `impersonating: true` and a banner offers `POST /api/admin/stop-impersonating` to switch back
 
 ### Shop
 - Items in `public/data/items.json` with `shopPrice` (integer) and `shopType` (`pokedollars` or `watts`) are sold in the SHOP tab of the `1` menu, grouped by currency. Items without these fields are not sold

@@ -24,6 +24,7 @@ function startGame(user) {
   let chat;
   let playersMenu;
   let pokemonMenu;
+  let adminDashboard;
 
   const config = {
     type: Phaser.AUTO,
@@ -145,6 +146,22 @@ function startGame(user) {
       if (!pokemart) return;
       const screenClosed = showBlackoutScreen(pokemart.name);
       teleportPlayer(buildingDoorstep(pokemart), "down");
+      let healed = false;
+      try {
+        const healRes = await fetch("api/my-pokemon/heal-party", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pokemartId: pokemart.id }),
+        });
+        healed = healRes.ok;
+      } catch (error) {
+        console.error("Could not heal party after blackout:", error);
+      }
+      if (healed) {
+        user.lastPokemartId = pokemart.id;
+      } else {
+        chat.appendMessage({ type: "system", message: "Could not heal your Pokémon." });
+      }
       await screenClosed;
     } catch (error) {
       console.error("Could not check for blackout:", error);
@@ -154,12 +171,12 @@ function startGame(user) {
   }
 
   async function tryWildEncounter(x, y) {
-    const area = Object.values(gameData.areas).find(({ coordinates }) =>
+    const [areaId, area] = Object.entries(gameData.areas).find(([, { coordinates }]) =>
       x >= coordinates.x.min &&
       x <= coordinates.x.max &&
       y >= coordinates.y.min &&
       y <= coordinates.y.max
-    );
+    ) || [];
     if (!area || Math.random() * 100 >= area.encounterChance) return;
 
     const encounters = area.pokemon.filter(
@@ -191,6 +208,7 @@ function startGame(user) {
     try {
       await startBattle({
         type: "wild",
+        areaId,
         enemyPokemon: [{
           species: encounter.speciesId,
           level,
@@ -273,6 +291,7 @@ function startGame(user) {
       getOnlinePlayers,
       onOpen: () => {
         if (pokemonMenu.isOpen()) pokemonMenu.close();
+        if (adminDashboard.isOpen()) adminDashboard.close();
         if (chat.isOpen()) chat.close();
       },
     });
@@ -285,6 +304,19 @@ function startGame(user) {
         if (playersMenu.isOpen()) playersMenu.close();
       },
     });
+
+    adminDashboard = createAdminDashboard({
+      user,
+      gameData,
+      onOpen: () => {
+        if (pokemonMenu.isOpen()) pokemonMenu.close();
+        if (playersMenu.isOpen()) playersMenu.close();
+        if (chat.isOpen()) chat.close();
+      },
+    });
+
+    // An admin deleted this account; reloading returns to the login screen.
+    socket.on("forceLogout", () => window.location.reload());
 
     // Send userId so server can look up DB record
     socket.emit("playerJoin", { userId: user.id });
@@ -333,7 +365,7 @@ function startGame(user) {
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Tab") {
+      if (e.key === "Tab" && !adminDashboard.isOpen()) {
         e.preventDefault();
         if (e.repeat) return;
         if (chat.isOpen() || battleOpen || buildingOpen || blackoutOpen) return;
@@ -352,6 +384,21 @@ function startGame(user) {
           pokemonMenu.close();
           return;
         }
+        if (adminDashboard.isOpen()) {
+          e.preventDefault();
+          adminDashboard.close();
+          return;
+        }
+      }
+
+      // The dashboard has its own text/number fields, so only "9" outside them toggles it.
+      if (adminDashboard.isOpen()) {
+        const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName);
+        if (e.key === "9" && !typing) {
+          e.preventDefault();
+          adminDashboard.close();
+        }
+        return;
       }
 
       if (
@@ -370,6 +417,9 @@ function startGame(user) {
       } else if (e.key === "1") {
         e.preventDefault();
         pokemonMenu.toggle();
+      } else if (e.key === "9" && user.admin) {
+        e.preventDefault();
+        adminDashboard.toggle();
       }
     });
 
@@ -377,6 +427,7 @@ function startGame(user) {
       battleOpen = true;
       if (pokemonMenu.isOpen()) pokemonMenu.close();
       if (playersMenu.isOpen()) playersMenu.close();
+      if (adminDashboard.isOpen()) adminDashboard.close();
       if (chat.isOpen()) chat.close();
     });
     window.addEventListener("battle:end", () => {
@@ -415,6 +466,7 @@ function startGame(user) {
       chat.isOpen() ||
       pokemonMenu.isOpen() ||
       playersMenu.isOpen() ||
+      adminDashboard.isOpen() ||
       battleOpen ||
       buildingOpen ||
       blackoutOpen ||

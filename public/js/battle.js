@@ -28,6 +28,11 @@
     };
   }
 
+  // Mirrors expToLevelUp() in server.js.
+  function expToLevelUp(species, level) {
+    return Math.max(1, Math.ceil(level * 0.2 * species.stats.EXPRATE));
+  }
+
   function makeCombatant(data, species, owned) {
     const stats = owned ? pokemonStats(species, data.level) : { ...data.stats };
     const maxHealth = stats.HP;
@@ -36,6 +41,7 @@
       speciesId: data.species || data.speciesId,
       name: data.nickname || species.name || data.species || data.speciesId,
       level: data.level,
+      exp: data.exp || 0,
       stats,
       maxHealth,
       health: Math.max(0, Math.min(maxHealth, data.health ?? maxHealth)),
@@ -156,6 +162,7 @@
       this.enemyIndex = 0;
       this.usedItems = new Map();
       this.caughtPokemon = null;
+      this.defeatedWild = null;
       this.busy = false;
       this.finished = false;
       this.saved = false;
@@ -226,7 +233,8 @@
           <div class="battle-name-line"><span class="battle-pokemon-name"></span><span class="battle-level"></span></div>
           <div class="battle-health-track"><div class="battle-health-fill"></div></div>
           <div class="battle-health-text"></div>
-          <div class="battle-status"></div>`;
+          <div class="battle-status"></div>
+          ${side === "player" ? '<div class="battle-exp-line"><span>EXP</span><div class="battle-exp-track"><div class="battle-exp-fill"></div></div></div>' : ""}`;
       }
       info.querySelector(".battle-pokemon-name").textContent = pokemon.name;
       info.querySelector(".battle-level").textContent = `Lv. ${pokemon.level}`;
@@ -236,6 +244,47 @@
       info.querySelector(".battle-health-text").textContent =
         `HP ${pokemon.health}/${pokemon.maxHealth}`;
       info.querySelector(".battle-status").textContent = pokemon.status?.name || "";
+      const expFill = info.querySelector(".battle-exp-fill");
+      if (expFill) {
+        const species = this.species[pokemon.speciesId];
+        const expRatio = pokemon.level >= 100 ? 1 : pokemon.exp / expToLevelUp(species, pokemon.level);
+        expFill.style.width = `${Math.min(1, expRatio) * 100}%`;
+      }
+    }
+
+    // Empties the EXP bar instantly (no fill transition) after a level up.
+    resetExpBar() {
+      const expFill = this.overlay.querySelector(".battle-combatant.player .battle-exp-fill");
+      if (!expFill) return;
+      expFill.style.transition = "none";
+      expFill.style.width = "0%";
+      void expFill.offsetWidth;
+      expFill.style.transition = "";
+    }
+
+    // Shows a dialog over the battle field and resolves with the chosen value.
+    popup(message, choices) {
+      return new Promise((resolve) => {
+        const box = document.createElement("div");
+        box.className = "battle-popup";
+        box.setAttribute("role", "dialog");
+        const text = document.createElement("p");
+        text.textContent = message;
+        const buttons = document.createElement("div");
+        buttons.className = "battle-popup-buttons";
+        choices.forEach((choice) => {
+          const button = this.button(choice.label, () => {
+            box.remove();
+            resolve(choice.value);
+          }, choice.details);
+          if (choice.primary) button.classList.add("primary");
+          buttons.appendChild(button);
+        });
+        box.appendChild(text);
+        box.appendChild(buttons);
+        this.overlay.querySelector(".battle-field").appendChild(box);
+        buttons.querySelector("button")?.focus();
+      });
     }
 
     render() {
@@ -781,10 +830,19 @@
       }
       if (this.enemy.health <= 0) {
         this.log(`${this.enemy.name} fainted!`);
+        if (this.options.type === "wild" && this.options.areaId && this.player.health > 0) {
+          this.defeatedWild = {
+            areaId: this.options.areaId,
+            speciesId: this.enemy.speciesId,
+            level: this.enemy.level,
+            pokemonId: this.player.id,
+          };
+        }
         const nextEnemy = this.enemies.findIndex(
           (pokemon, index) => index > this.enemyIndex && pokemon.health > 0
         );
         if (nextEnemy === -1) {
+          if (this.defeatedWild) await this.awardExp();
           await this.finish("victory", "YOU WON!");
           return;
         }
@@ -909,11 +967,123 @@
           health: this.party.map((pokemon) => ({ id: pokemon.id, health: pokemon.health })),
           usedItems: Array.from(this.usedItems, ([itemId, quantity]) => ({ itemId, quantity })),
           caughtPokemon: this.caughtPokemon,
+          defeatedWild: this.defeatedWild,
           prizeMoney,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save battle results.");
+      this.saved = true;
+      return data;
+    }
+
+    async awardExp() {
+      this.setControls([], false);
+      let expGain;
+      try {
+        expGain = (await this.save(this.options.prizeMoney || 0)).expGain;
+      } catch (error) {
+        this.log(error.message);
+        return;
+      }
+      const combatant = expGain && this.party.find((member) => member.id === expGain.pokemon.id);
+      if (!combatant) return;
+
+      const species = this.species[combatant.speciesId];
+      this.log(`${combatant.name} gained ${expGain.exp} EXP. Points!`);
+      let remaining = expGain.exp;
+      let movesChanged = false;
+      while (remaining > 0 && combatant.level < 100) {
+        const needed = expToLevelUp(species, combatant.level) - combatant.exp;
+        const step = Math.min(remaining, needed);
+        combatant.exp += step;
+        remaining -= step;
+        this.render();
+        await this.wait(800);
+        if (step < needed) break;
+
+        const previousMaxHealth = combatant.maxHealth;
+        combatant.level += 1;
+        combatant.exp = 0;
+        combatant.stats = pokemonStats(species, combatant.level);
+        combatant.maxHealth = combatant.stats.HP;
+        combatant.health += combatant.maxHealth - previousMaxHealth;
+        this.resetExpBar();
+        this.render();
+        this.log(`${combatant.name} grew to Lv. ${combatant.level}!`);
+        await this.wait(600);
+
+        const newMoves = (species.moves || []).filter(
+          (learnedMove) =>
+            learnedMove.level === combatant.level && !combatant.moves.includes(learnedMove.move)
+        );
+        for (const { move } of newMoves) {
+          if (await this.offerMove(combatant, move)) movesChanged = true;
+        }
+      }
+
+      // The server's result is authoritative.
+      combatant.level = expGain.pokemon.level;
+      combatant.exp = expGain.pokemon.exp;
+      combatant.stats = pokemonStats(species, combatant.level);
+      combatant.maxHealth = combatant.stats.HP;
+      combatant.health = expGain.pokemon.health;
+      this.render();
+
+      if (movesChanged) {
+        try {
+          const response = await fetch(`api/my-pokemon/${combatant.id}/moves`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ moves: combatant.moves }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not save moves.");
+        } catch (error) {
+          this.log(error.message);
+        }
+      }
+    }
+
+    // Asks whether to learn `moveId`, and which move to forget if four are known.
+    async offerMove(combatant, moveId) {
+      const move = this.moves[moveId] || { name: moveId };
+      const moveDetails = (id) => {
+        const details = this.moves[id] || {};
+        return `${details.type || "?"} · ${details.category || "?"} · DMG ${details.damage ?? "-"}`;
+      };
+      while (true) {
+        const learn = await this.popup(`${combatant.name} wants to learn ${move.name}!`, [
+          { label: `LEARN ${move.name.toUpperCase()}`, details: moveDetails(moveId), value: true, primary: true },
+          { label: "DON'T LEARN", value: false },
+        ]);
+        if (!learn) {
+          this.log(`${combatant.name} did not learn ${move.name}.`);
+          return false;
+        }
+        if (combatant.moves.length < 4) {
+          combatant.moves.push(moveId);
+          this.log(`${combatant.name} learned ${move.name}!`);
+          return true;
+        }
+
+        const forgetIndex = await this.popup(
+          `${combatant.name} already knows four moves. Which move should be forgotten to make room for ${move.name}?`,
+          [
+            ...combatant.moves.map((id, index) => ({
+              label: this.moves[id]?.name || id,
+              details: moveDetails(id),
+              value: index,
+            })),
+            { label: "BACK", value: null },
+          ]
+        );
+        if (forgetIndex === null) continue;
+        const forgotten = this.moves[combatant.moves[forgetIndex]]?.name || combatant.moves[forgetIndex];
+        combatant.moves[forgetIndex] = moveId;
+        this.log(`${combatant.name} forgot ${forgotten} and learned ${move.name}!`);
+        return true;
+      }
     }
 
     async finish(result, title) {
@@ -932,10 +1102,7 @@
       const continueButton = this.button("CONTINUE", async () => {
         continueButton.disabled = true;
         try {
-          if (!this.saved) {
-            await this.save(prizeMoney);
-            this.saved = true;
-          }
+          if (!this.saved) await this.save(prizeMoney);
           if (
             result === "victory" &&
             typeof this.options.onVictory === "function" &&

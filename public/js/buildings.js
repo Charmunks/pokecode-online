@@ -1,15 +1,3 @@
-// ─── Buildings ───
-// Each building is a solid block of tiles drawn with one sprite stretched to its size.
-//   id:       unique identifier (saved in the DB, e.g. users.lastPokemartId)
-//   name:     display name
-//   type:     building kind, e.g. "pokemart"
-//   sprite:   image path, also used as the texture key
-//   position: top-left tile of the building on the map
-//   size:     width/height in tiles
-//   entrance: tile rectangle relative to the building's top-left (width/height default to 1);
-//             walking into it calls onEnter(context) once per contact
-//   onEnter:  called with { building, user, gameData, appendChatMessage }; may return a
-//             promise, and the player can't move or open menus until it settles
 const BUILDINGS = [
   pokemart({ id: "northeast-pokemart", name: "Northeast Pokémart", x: 45, y: 1 }),
 ];
