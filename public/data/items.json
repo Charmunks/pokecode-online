@@ -4,6 +4,7 @@
     "description": "Restores 20 HP to one Pokémon.",
     "type": "Medicine",
     "battleUsable": true,
+    "bagUsable": true,
     "shopPrice": 300,
     "shopType": "pokedollars"
   },
@@ -11,21 +12,24 @@
     "name": "Full Heal",
     "description": "Cures one Pokémon of any status condition.",
     "type": "Medicine",
-    "battleUsable": true
+    "battleUsable": true,
+    "bagUsable": true
   },
   "revive": {
     "name": "Revive",
     "description": "Revives a fainted Pokémon, restoring half its max HP.",
     "type": "Medicine",
     "battleUsable": true,
+    "bagUsable": false,
     "shopPrice": 1500,
     "shopType": "pokedollars"
   },
   "rare-candy": {
     "name": "Rare Candy",
     "description": "A candy packed with energy. Raises a Pokémon's level by one.",
-    "type": "Medicine",
+    "type": "Training",
     "battleUsable": false,
+    "bagUsable": true,
     "shopPrice": 50,
     "shopType": "watts"
   },
@@ -34,6 +38,7 @@
     "description": "A device for catching wild Pokémon.",
     "type": "Balls",
     "battleUsable": true,
+    "bagUsable": false,
     "shopPrice": 200,
     "shopType": "pokedollars"
   },
@@ -41,6 +46,7 @@
     "name": "Escape Rope",
     "description": "Returns you to the entrance of a cave or dungeon.",
     "type": "Key Items",
-    "battleUsable": false
+    "battleUsable": false,
+    "bagUsable": false
   }
 }

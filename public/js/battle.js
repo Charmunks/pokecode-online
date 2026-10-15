@@ -49,7 +49,8 @@
       sprite: owned
         ? species.battleSprite || species.mainSprite
         : species.mainSprite || species.battleSprite,
-      status: null,
+      // Owned Pokémon keep their status between battles.
+      status: data.status ? { ...data.status } : null,
       stages: { ATTACK: 0, DEFENSE: 0, SPA: 0, SPD: 0, SPEED: 0, ACCURACY: 0, EVASION: 0 },
       leechSeeded: false,
       yawnTurns: 0,
@@ -935,6 +936,7 @@
           pokemonStats(this.species[this.enemy.speciesId], this.enemy.level).HP
         ),
         moves: this.enemy.moves,
+        status: this.enemy.status,
       };
       const buttons = [];
       if (this.party.length < 6) {
@@ -964,7 +966,11 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          health: this.party.map((pokemon) => ({ id: pokemon.id, health: pokemon.health })),
+          health: this.party.map((pokemon) => ({
+            id: pokemon.id,
+            health: pokemon.health,
+            status: pokemon.status,
+          })),
           usedItems: Array.from(this.usedItems, ([itemId, quantity]) => ({ itemId, quantity })),
           caughtPokemon: this.caughtPokemon,
           defeatedWild: this.defeatedWild,

@@ -84,12 +84,14 @@ document.getElementById("starter-confirm").addEventListener("click", async () =>
     }
 
     currentUser.needsStarter = false;
-    launchGame();
+    showScreen("tutorial-screen");
   } catch (err) {
     errorEl.textContent = "Connection error";
     confirmButton.disabled = false;
   }
 });
+
+document.getElementById("tutorial-confirm").addEventListener("click", launchGame);
 
 function continueToGame() {
   if (currentUser.needsStarter) {

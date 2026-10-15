@@ -48,5 +48,33 @@
     },
   };
 
-  window.BattleItemEffects = effects;
+  // Effects for items marked bagUsable in items.json, used outside of battle from
+  // the bag. These run on the server (POST /api/my-items/use), which saves the
+  // changes. context.target is { name, level, exp, health, maxHealth, status,
+  // maxHealthForLevel(level) }.
+  const bagEffects = {
+    potion: effects.potion,
+    antidote: effects.antidote,
+    "rare-candy"(context) {
+      const target = context.target;
+      if (!target || target.level >= 100) {
+        return { used: false, message: "Rare Candy would have no effect." };
+      }
+      // Leveling up raises max health; keep the same amount of missing health.
+      const newMaxHealth = target.maxHealthForLevel(target.level + 1);
+      if (target.health > 0) target.health += newMaxHealth - target.maxHealth;
+      target.maxHealth = newMaxHealth;
+      target.level += 1;
+      target.exp = 0;
+      return { used: true, message: `${target.name} grew to Lv. ${target.level}!` };
+    },
+  };
+
+  if (typeof window !== "undefined") {
+    window.BattleItemEffects = effects;
+    window.BagItemEffects = bagEffects;
+  }
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { BattleItemEffects: effects, BagItemEffects: bagEffects };
+  }
 })();

@@ -259,6 +259,57 @@
       .starter-select { grid-template-columns: repeat(2, 1fr); }
       .starter-box { padding: 24px 18px; }
     }
+
+    .tutorial-box {
+      width: min(560px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      text-align: left;
+    }
+
+    .tutorial-box h1 { text-align: center; }
+
+    .tutorial-box .subtitle { text-align: center; }
+
+    .tutorial-box h2 {
+      color: #383838;
+      font-size: 10px;
+      margin: 16px 0 10px;
+    }
+
+    .tutorial-controls {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 12px;
+      align-items: center;
+      font-size: 8px;
+      color: #585858;
+    }
+
+    .tutorial-controls kbd {
+      display: inline-block;
+      padding: 4px 6px;
+      background: #fff;
+      border: 2px solid #383838;
+      border-bottom-width: 4px;
+      color: #383838;
+      font: 8px 'Press Start 2P', monospace;
+      white-space: nowrap;
+    }
+
+    .tutorial-box ul {
+      list-style: none;
+      color: #585858;
+      font-size: 8px;
+      line-height: 1.8;
+    }
+
+    .tutorial-box li { margin-bottom: 8px; }
+
+    .tutorial-box li::before {
+      content: '▶ ';
+      color: #ec3750;
+    }
   </style>
 </head>
 <body>
@@ -334,6 +385,34 @@
 
       <div id="starter-error" class="error-msg"></div>
       <button id="starter-confirm" class="btn" type="button" disabled>▶ CHOOSE</button>
+    </div>
+  </div>
+
+  <!-- Tutorial (controls + how the game works, shown at the end of onboarding) -->
+  <div id="tutorial-screen" class="screen hidden">
+    <div class="box tutorial-box">
+      <h1>HOW TO PLAY</h1>
+      <p class="subtitle">TRAINER GUIDE</p>
+      <div class="pokeball-divider"><span>●</span></div>
+
+      <h2>▶ CONTROLS</h2>
+      <div class="tutorial-controls">
+        <span><kbd>WASD</kbd> <kbd>ARROWS</kbd></span><span>Walk around the world</span>
+        <span><kbd>T</kbd></span><span>Open chat (ENTER sends, ESC closes)</span>
+        <span><kbd>1</kbd></span><span>Pokémon, bag, shop, projects &amp; profile</span>
+        <span><kbd>TAB</kbd></span><span>See who's online</span>
+        <span><kbd>ESC</kbd></span><span>Close any open menu</span>
+      </div>
+
+      <h2>▶ HOW IT WORKS</h2>
+      <ul>
+        <li>Everyone you see is another real Hack Clubber playing the same game and building their own projects.</li>
+        <li>Walk through tall grass to find wild Pokémon. Win battles to earn EXP and level up. Explore the world and take on gyms and eventually the champion.</li>
+        <li>Add projects you are working on in the menu. Shipping projects will give currency you can use to help progress in the game and to get real IRL prizes.</li>
+        <li>Take on other players in the battle arena or by clicking on them, and try to become the strongest.</li>
+      </ul>
+
+      <button id="tutorial-confirm" class="btn" type="button">▶ START ADVENTURE</button>
     </div>
   </div>
 

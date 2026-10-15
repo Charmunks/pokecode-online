@@ -231,7 +231,8 @@ function createAdminDashboard({ user, gameData, onOpen }) {
     const topRow = el("div", "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;");
     const backButton = button("◀ BACK");
     backButton.addEventListener("click", showAccountList);
-    const actions = el("div", "display:flex;gap:8px;");
+    const actions = el("div", "display:flex;gap:8px;flex-wrap:wrap;");
+    const onboardingButton = button("TEST ONBOARDING FLOW", "#ff8c37", "#fff");
     const impersonateButton = button("IMPERSONATE", "#338eda", "#fff");
     const deleteButton = button("DELETE ACCOUNT", "#ec3750", "#fff");
     const isSelf = account.id === user.id;
@@ -241,6 +242,7 @@ function createAdminDashboard({ user, gameData, onOpen }) {
       impersonateButton.style.opacity = "0.4";
       deleteButton.style.opacity = "0.4";
     }
+    actions.appendChild(onboardingButton);
     actions.appendChild(impersonateButton);
     actions.appendChild(deleteButton);
     topRow.appendChild(backButton);
@@ -266,6 +268,21 @@ function createAdminDashboard({ user, gameData, onOpen }) {
       cell.appendChild(el("div", "color:#787878;font-size:6px;", label));
       cell.appendChild(el("div", "", String(value)));
       info.appendChild(cell);
+    });
+
+    onboardingButton.addEventListener("click", async () => {
+      const choice = await showChoiceDialog(
+        `Send ${isSelf ? "yourself" : account.username || account.email} back through onboarding? Their name is cleared and they pick a name, character and starter again. Pokémon and items are kept.`,
+        ["YES", "NO"]
+      );
+      if (choice !== "YES") return;
+      try {
+        await api(`api/admin/users/${account.id}/reset-onboarding`, { method: "POST" });
+        if (isSelf) window.location.reload();
+        else refresh();
+      } catch (err) {
+        setStatus(actionStatus, err.message, true);
+      }
     });
 
     impersonateButton.addEventListener("click", async () => {

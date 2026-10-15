@@ -152,6 +152,9 @@ function createPokemonMenu({ user, gameData, onOpen }) {
   const itemList = document.createElement("div");
   itemList.style.cssText = "display:grid;gap:8px;";
 
+  const bagMessage = document.createElement("div");
+  bagMessage.style.cssText = "min-height:12px;margin-top:8px;font-size:7px;color:#585858;line-height:1.7;";
+
   const itemAdminControls = document.createElement("div");
   itemAdminControls.style.cssText =
     "display:none;margin-top:20px;padding-top:16px;border-top:2px solid #c0c0c0;";
@@ -198,6 +201,7 @@ function createPokemonMenu({ user, gameData, onOpen }) {
   itemAdminControls.appendChild(itemAdminMessage);
   bagView.appendChild(itemTypeTabs);
   bagView.appendChild(itemList);
+  bagView.appendChild(bagMessage);
   bagView.appendChild(itemAdminControls);
   bagView.appendChild(bagHint);
 
@@ -253,7 +257,8 @@ function createPokemonMenu({ user, gameData, onOpen }) {
     return "data:image/svg+xml;base64," + btoa(svg);
   }
 
-  function pokemonSlotEl(mon) {
+  // Clicking a slot opens the Pokémon's summary, or calls onSelect(mon) when given.
+  function pokemonSlotEl(mon, onSelect = null) {
     const slot = document.createElement(mon ? "button" : "div");
     slot.style.cssText =
       "display:flex;flex-direction:column;align-items:center;background:#fff;border:2px solid " +
@@ -271,8 +276,13 @@ function createPokemonMenu({ user, gameData, onOpen }) {
 
     slot.type = "button";
     slot.style.cursor = "pointer";
-    slot.setAttribute("aria-label", `View ${mon.nickname || mon.speciesId} summary`);
-    slot.addEventListener("click", () => renderPokemonSummary(mon));
+    if (onSelect) {
+      slot.setAttribute("aria-label", `Choose ${mon.nickname || mon.speciesId}`);
+      slot.addEventListener("click", () => onSelect(mon));
+    } else {
+      slot.setAttribute("aria-label", `View ${mon.nickname || mon.speciesId} summary`);
+      slot.addEventListener("click", () => renderPokemonSummary(mon));
+    }
 
     const species = gameData.species[mon.speciesId] || {};
     const img = document.createElement("img");
@@ -301,6 +311,12 @@ function createPokemonMenu({ user, gameData, onOpen }) {
     slot.appendChild(label);
     slot.appendChild(level);
     slot.appendChild(health);
+    if (mon.status) {
+      const status = document.createElement("div");
+      status.textContent = mon.status.name.toUpperCase();
+      status.style.cssText = "font-size:6px;color:#a463f2;margin-top:4px;";
+      slot.appendChild(status);
+    }
     return slot;
   }
 
@@ -466,6 +482,7 @@ function createPokemonMenu({ user, gameData, onOpen }) {
       species.name || mon.speciesId,
       `Lv. ${mon.level}`,
       `Health: ${mon.health}/${stats.HP}`,
+      `Status: ${mon.status ? mon.status.name : "OK"}`,
       mon.expToNextLevel ? `EXP: ${mon.exp}/${mon.expToNextLevel}` : "EXP: MAX",
       `Friendship: ${mon.friendship}`,
     ].forEach((detail) => {
@@ -819,7 +836,7 @@ function createPokemonMenu({ user, gameData, onOpen }) {
         const item = gameData.items[ownedItem.itemId];
         const row = document.createElement("div");
         row.style.cssText =
-          "display:grid;grid-template-columns:minmax(120px,1fr) 3fr auto;gap:12px;align-items:center;background:#fff;border:2px solid #c0c0c0;padding:12px;";
+          "display:grid;grid-template-columns:minmax(120px,1fr) 3fr auto auto;gap:12px;align-items:center;background:#fff;border:2px solid #c0c0c0;padding:12px;";
 
         const itemName = document.createElement("div");
         itemName.textContent = item.name;
@@ -833,14 +850,112 @@ function createPokemonMenu({ user, gameData, onOpen }) {
         quantity.textContent = `×${ownedItem.quantity}`;
         quantity.style.cssText = "font-size:10px;color:#ec3750;";
 
+        // Keeps the USE column in place for items that can't be used from the bag.
+        const useCell = document.createElement("div");
+        if (item.bagUsable && window.BagItemEffects?.[ownedItem.itemId]) {
+          const useButton = document.createElement("button");
+          useButton.type = "button";
+          useButton.textContent = "USE";
+          useButton.style.cssText =
+            "padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+          useButton.addEventListener("click", () => renderItemTargetPicker(ownedItem.itemId));
+          useCell.appendChild(useButton);
+        }
+
         row.appendChild(itemName);
         row.appendChild(itemDescription);
         row.appendChild(quantity);
+        row.appendChild(useCell);
         itemList.appendChild(row);
       });
     }
 
     itemAdminControls.style.display = user.admin ? "block" : "none";
+  }
+
+  // Lists the party so the player can pick which Pokémon to use `itemId` on.
+  function renderItemTargetPicker(itemId) {
+    const item = gameData.items[itemId];
+    showMenuTab(`USE ${item.name.toUpperCase()}`, bagView, bagMenuButton);
+    itemTypeTabs.innerHTML = "";
+    itemList.innerHTML = "";
+    bagMessage.textContent = "";
+    itemAdminControls.style.display = "none";
+
+    const prompt = document.createElement("div");
+    prompt.textContent = "Use on which Pokémon?";
+    prompt.style.cssText = "font-size:8px;color:#585858;";
+
+    const partyChoices = document.createElement("div");
+    partyChoices.style.cssText = "display:grid;grid-template-columns:repeat(6,1fr);gap:8px;";
+    if (myPokemon.party.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "Your party is empty.";
+      empty.style.cssText = "font-size:8px;color:#585858;grid-column:1/-1;";
+      partyChoices.appendChild(empty);
+    }
+    myPokemon.party.forEach((mon) =>
+      partyChoices.appendChild(pokemonSlotEl(mon, (target) => useItem(itemId, target, partyChoices)))
+    );
+
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.textContent = "CANCEL";
+    cancelButton.style.cssText =
+      "justify-self:start;padding:8px 10px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+    cancelButton.addEventListener("click", () => {
+      bagMessage.textContent = "";
+      renderBag();
+    });
+
+    itemList.appendChild(prompt);
+    itemList.appendChild(partyChoices);
+    itemList.appendChild(cancelButton);
+  }
+
+  async function useItem(itemId, mon, partyChoices) {
+    const item = gameData.items[itemId];
+    partyChoices.querySelectorAll("button").forEach((button) => (button.disabled = true));
+    bagMessage.style.color = "#585858";
+    bagMessage.textContent = "Using...";
+
+    try {
+      const res = await fetch("api/my-items/use", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, pokemonId: mon.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // Stay on the picker so another Pokémon can be chosen.
+        bagMessage.style.color = "#ec3750";
+        bagMessage.textContent = data.error || `Could not use ${item.name}.`;
+        partyChoices.querySelectorAll("button").forEach((button) => (button.disabled = false));
+        return;
+      }
+
+      // Mention moves the Pokémon can now learn; they're picked from its summary.
+      const newMoves = (gameData.species[data.pokemon.speciesId]?.moves || [])
+        .filter(
+          (learnedMove) =>
+            learnedMove.level > mon.level &&
+            learnedMove.level <= data.pokemon.level &&
+            !data.pokemon.moves.includes(learnedMove.move)
+        )
+        .map((learnedMove) => gameData.moves[learnedMove.move]?.name || learnedMove.move);
+
+      await Promise.all([loadMyPokemon(), loadMyItems()]);
+      renderBag();
+      bagMessage.style.color = "#198754";
+      bagMessage.textContent = data.message;
+      if (newMoves.length > 0) {
+        bagMessage.textContent += ` It can now learn ${newMoves.join(", ")}! Choose its moves from its summary.`;
+      }
+    } catch (err) {
+      bagMessage.style.color = "#ec3750";
+      bagMessage.textContent = "Connection error.";
+      partyChoices.querySelectorAll("button").forEach((button) => (button.disabled = false));
+    }
   }
 
   function renderShop() {
@@ -1609,7 +1724,10 @@ function createPokemonMenu({ user, gameData, onOpen }) {
   }
 
   pokemonMenuButton.addEventListener("click", renderPokemonMenu);
-  bagMenuButton.addEventListener("click", renderBag);
+  bagMenuButton.addEventListener("click", () => {
+    bagMessage.textContent = "";
+    renderBag();
+  });
   shopMenuButton.addEventListener("click", () => {
     shopMessage.textContent = "";
     renderShop();
