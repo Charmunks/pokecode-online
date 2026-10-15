@@ -2,12 +2,15 @@
 // The "1" overlay: Pokémon list/summary, bag, shop, and admin tools.
 // gameData holds the species/moves/items JSON loaded by game.js.
 // onOpen runs before the menu opens (used to close other overlays).
-function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
+function createPokemonMenu({ user, gameData, onOpen }) {
   let pokemonMenuOpen = false;
   let myPokemon = { party: [], box: [] };
   let myItems = [];
   let myCurrency = { pokedollars: 0, watts: 0 };
   let selectedItemType = null;
+  let myProjects = { hackatimeConnected: Boolean(user.hackatimeConnected), projects: [] };
+  let hackatimeProjects = null;
+  let myProfile = null;
 
   const pokemonOverlay = document.createElement("div");
   pokemonOverlay.id = "pokemon-menu-overlay";
@@ -23,7 +26,7 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
   pokemonTitle.style.cssText = "font-size:14px;margin-bottom:16px;letter-spacing:2px;";
 
   const menuNavigation = document.createElement("div");
-  menuNavigation.style.cssText = "display:flex;gap:8px;margin-bottom:16px;";
+  menuNavigation.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;";
 
   const pokemonMenuButton = document.createElement("button");
   pokemonMenuButton.type = "button";
@@ -43,16 +46,23 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
   shopMenuButton.style.cssText =
     "padding:9px 12px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
 
-  const testBattleButton = document.createElement("button");
-  testBattleButton.type = "button";
-  testBattleButton.textContent = "TEST BATTLE";
-  testBattleButton.style.cssText =
-    "padding:9px 12px;border:2px solid #383838;background:#338eda;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+  const projectsMenuButton = document.createElement("button");
+  projectsMenuButton.type = "button";
+  projectsMenuButton.textContent = "PROJECTS";
+  projectsMenuButton.style.cssText =
+    "padding:9px 12px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+  const profileMenuButton = document.createElement("button");
+  profileMenuButton.type = "button";
+  profileMenuButton.textContent = "PROFILE";
+  profileMenuButton.style.cssText =
+    "padding:9px 12px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
 
   menuNavigation.appendChild(pokemonMenuButton);
   menuNavigation.appendChild(bagMenuButton);
   menuNavigation.appendChild(shopMenuButton);
-  menuNavigation.appendChild(testBattleButton);
+  menuNavigation.appendChild(projectsMenuButton);
+  menuNavigation.appendChild(profileMenuButton);
 
   const currencyBar = document.createElement("div");
   currencyBar.style.cssText =
@@ -220,6 +230,16 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
   shopView.appendChild(shopMessage);
   shopView.appendChild(shopHint);
   pokemonPanel.appendChild(shopView);
+
+  // Contents are rebuilt by renderProjects() / renderProjectForm().
+  const projectsView = document.createElement("div");
+  projectsView.style.display = "none";
+  pokemonPanel.appendChild(projectsView);
+
+  // Contents are rebuilt by renderProfile().
+  const profileView = document.createElement("div");
+  profileView.style.display = "none";
+  pokemonPanel.appendChild(profileView);
   pokemonOverlay.appendChild(pokemonPanel);
   document.body.appendChild(pokemonOverlay);
 
@@ -720,10 +740,10 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
 
   function showMenuTab(title, view, button) {
     pokemonTitle.textContent = title;
-    [pokemonListView, pokemonSummary, bagView, shopView].forEach((tabView) => {
+    [pokemonListView, pokemonSummary, bagView, shopView, projectsView, profileView].forEach((tabView) => {
       tabView.style.display = tabView === view ? "block" : "none";
     });
-    [pokemonMenuButton, bagMenuButton, shopMenuButton].forEach((tabButton) => {
+    [pokemonMenuButton, bagMenuButton, shopMenuButton, projectsMenuButton, profileMenuButton].forEach((tabButton) => {
       tabButton.style.background = tabButton === button ? "#ec3750" : "#fff";
       tabButton.style.color = tabButton === button ? "#fff" : "#383838";
     });
@@ -751,9 +771,6 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     adminControls.style.display = user.admin ? "block" : "none";
     addPokemonButton.disabled = myPokemon.party.length >= 6;
     addPokemonButton.style.background = addPokemonButton.disabled ? "#a0a0a0" : "#ec3750";
-    testBattleButton.disabled = !myPokemon.party.some((pokemon) => pokemon.health > 0);
-    testBattleButton.style.background = testBattleButton.disabled ? "#a0a0a0" : "#338eda";
-    testBattleButton.style.cursor = testBattleButton.disabled ? "not-allowed" : "pointer";
   }
 
   function renderBag() {
@@ -899,6 +916,633 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     });
   }
 
+  const PROJECT_ICON_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  const MAX_PROJECT_ICON_BYTES = 256 * 1024;
+  const FORM_FIELD_STYLE =
+    "width:100%;box-sizing:border-box;padding:8px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;";
+
+  function formatHackatimeTime(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  }
+
+  function projectsHint() {
+    const hint = document.createElement("div");
+    hint.textContent = "Press 1 or ESC to close";
+    hint.style.cssText = "font-size:8px;color:#585858;margin-top:20px;text-align:center;";
+    return hint;
+  }
+
+  async function openProjectsTab() {
+    showMenuTab("YOUR PROJECTS", projectsView, projectsMenuButton);
+    projectsView.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.textContent = "Loading...";
+    loading.style.cssText = "font-size:8px;color:#585858;";
+    projectsView.appendChild(loading);
+
+    await loadMyProjects();
+    if (myProjects.hackatimeConnected) await loadHackatimeProjects();
+    if (projectsView.style.display !== "none") renderProjects();
+  }
+
+  function renderProjects() {
+    showMenuTab("YOUR PROJECTS", projectsView, projectsMenuButton);
+    projectsView.innerHTML = "";
+
+    if (!myProjects.hackatimeConnected) {
+      const prompt = document.createElement("div");
+      prompt.textContent =
+        "Link your Hackatime account to track your coding projects.";
+      prompt.style.cssText = "font-size:8px;color:#585858;line-height:1.8;margin-bottom:14px;";
+
+      const linkButton = document.createElement("a");
+      linkButton.href = "auth/hackatime";
+      linkButton.textContent = "LINK HACKATIME";
+      linkButton.style.cssText =
+        "display:inline-block;padding:9px 12px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;text-decoration:none;";
+
+      projectsView.appendChild(prompt);
+      projectsView.appendChild(linkButton);
+      projectsView.appendChild(projectsHint());
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.style.cssText = "display:grid;gap:8px;margin-bottom:14px;";
+
+    if (myProjects.projects.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "You have no projects yet.";
+      empty.style.cssText = "font-size:8px;color:#585858;line-height:1.7;padding:12px 0;";
+      list.appendChild(empty);
+    }
+
+    myProjects.projects.forEach((project) => {
+      // The card holds the edit button plus a separate row of links, since links can't go inside a button.
+      const card = document.createElement("div");
+      card.style.cssText = "background:#fff;border:2px solid #c0c0c0;";
+      card.addEventListener("mouseenter", () => (card.style.borderColor = "#383838"));
+      card.addEventListener("mouseleave", () => (card.style.borderColor = "#c0c0c0"));
+
+      const row = document.createElement("button");
+      row.type = "button";
+      row.setAttribute("aria-label", `Edit ${project.name}`);
+      row.style.cssText =
+        "display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:none;border:none;padding:12px;color:#383838;font-family:'Press Start 2P',monospace;cursor:pointer;";
+      row.addEventListener("click", () => renderProjectForm(project));
+
+      const icon = document.createElement("img");
+      icon.src = project.icon || pokemonPlaceholderSprite(project.name);
+      icon.alt = "";
+      icon.width = 40;
+      icon.height = 40;
+      icon.style.cssText = "flex-shrink:0;object-fit:cover;image-rendering:pixelated;";
+      icon.onerror = () => {
+        icon.onerror = null;
+        icon.src = pokemonPlaceholderSprite(project.name);
+      };
+
+      const details = document.createElement("div");
+      details.style.cssText = "min-width:0;";
+
+      const name = document.createElement("div");
+      name.textContent = project.name;
+      name.style.cssText = "font-size:9px;line-height:1.5;word-break:break-word;";
+      details.appendChild(name);
+
+      if (project.description) {
+        const description = document.createElement("div");
+        description.textContent = project.description;
+        description.style.cssText =
+          "font-size:7px;color:#585858;line-height:1.7;margin-top:4px;word-break:break-word;";
+        details.appendChild(description);
+      }
+
+      if (project.hackatimeProjects.length > 0) {
+        const tracked = (hackatimeProjects || []).filter((hackatimeProject) =>
+          project.hackatimeProjects.includes(hackatimeProject.name)
+        );
+        const hackatime = document.createElement("div");
+        hackatime.textContent = `HACKATIME: ${project.hackatimeProjects.join(", ")}`;
+        if (tracked.length > 0) {
+          const totalSeconds = tracked.reduce((sum, { totalSeconds }) => sum + totalSeconds, 0);
+          hackatime.textContent += ` · ${formatHackatimeTime(totalSeconds)}`;
+        }
+        hackatime.style.cssText =
+          "font-size:6px;color:#338eda;line-height:1.7;margin-top:6px;word-break:break-word;";
+        details.appendChild(hackatime);
+      }
+
+      row.appendChild(icon);
+      row.appendChild(details);
+      card.appendChild(row);
+
+      const links = [
+        { label: "CODE", url: project.codeUrl },
+        { label: "PLAY", url: project.playableUrl },
+      ].filter(({ url }) => url);
+      if (links.length > 0) {
+        const linkRow = document.createElement("div");
+        linkRow.style.cssText = "display:flex;gap:8px;padding:0 12px 12px 64px;";
+        links.forEach(({ label, url }) => {
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = `${label} ↗`;
+          link.style.cssText =
+            "padding:6px 8px;border:2px solid #383838;background:#fff;color:#383838;font:7px 'Press Start 2P',monospace;text-decoration:none;";
+          linkRow.appendChild(link);
+        });
+        card.appendChild(linkRow);
+      }
+
+      list.appendChild(card);
+    });
+
+    const addProjectButton = document.createElement("button");
+    addProjectButton.type = "button";
+    addProjectButton.textContent = "+ ADD PROJECT";
+    addProjectButton.style.cssText =
+      "padding:9px 12px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+    addProjectButton.addEventListener("click", () => renderProjectForm());
+
+    projectsView.appendChild(list);
+    projectsView.appendChild(addProjectButton);
+    projectsView.appendChild(projectsHint());
+  }
+
+  // Create a project, or edit `project` when one is given.
+  function renderProjectForm(project = null) {
+    showMenuTab(project ? "EDIT PROJECT" : "NEW PROJECT", projectsView, projectsMenuButton);
+    projectsView.innerHTML = "";
+
+    const form = document.createElement("form");
+    form.style.cssText = "display:flex;flex-direction:column;gap:12px;";
+    // Keep typing from reaching the game's hotkeys and movement keys; Escape still closes the menu.
+    form.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") event.stopPropagation();
+    });
+
+    function field(labelText, input) {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;flex-direction:column;gap:6px;font-size:8px;color:#ec3750;";
+      label.appendChild(document.createTextNode(labelText));
+      input.style.cssText = FORM_FIELD_STYLE;
+      label.appendChild(input);
+      form.appendChild(label);
+      return input;
+    }
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.required = true;
+    nameInput.maxLength = 100;
+    nameInput.value = project?.name || "";
+    field("NAME *", nameInput);
+
+    const descriptionInput = document.createElement("textarea");
+    descriptionInput.rows = 3;
+    descriptionInput.maxLength = 1000;
+    descriptionInput.value = project?.description || "";
+    field("DESCRIPTION", descriptionInput);
+    descriptionInput.style.resize = "vertical";
+    descriptionInput.style.lineHeight = "1.7";
+
+    const codeUrlInput = document.createElement("input");
+    codeUrlInput.type = "url";
+    codeUrlInput.maxLength = 500;
+    codeUrlInput.placeholder = "https://github.com/...";
+    codeUrlInput.value = project?.codeUrl || "";
+    field("CODE URL", codeUrlInput);
+
+    const playableUrlInput = document.createElement("input");
+    playableUrlInput.type = "url";
+    playableUrlInput.maxLength = 500;
+    playableUrlInput.placeholder = "https://...";
+    playableUrlInput.value = project?.playableUrl || "";
+    field("PLAYABLE URL", playableUrlInput);
+
+    const iconInput = document.createElement("input");
+    iconInput.type = "file";
+    iconInput.accept = PROJECT_ICON_TYPES.join(",");
+    field(project?.icon ? "NEW ICON (PNG/JPEG/GIF/WEBP, MAX 256 KB)" : "ICON (PNG/JPEG/GIF/WEBP, MAX 256 KB)", iconInput);
+
+    // When editing a project that has an icon, show it with an option to remove it.
+    const removeIconCheckbox = document.createElement("input");
+    removeIconCheckbox.type = "checkbox";
+    if (project?.icon) {
+      const currentIcon = document.createElement("label");
+      currentIcon.style.cssText =
+        "display:flex;align-items:center;gap:10px;font-size:7px;color:#585858;cursor:pointer;";
+      const preview = document.createElement("img");
+      preview.src = project.icon;
+      preview.alt = "Current icon";
+      preview.width = 32;
+      preview.height = 32;
+      preview.style.cssText = "object-fit:cover;image-rendering:pixelated;border:2px solid #c0c0c0;";
+      currentIcon.appendChild(preview);
+      currentIcon.appendChild(removeIconCheckbox);
+      currentIcon.appendChild(document.createTextNode("Remove current icon"));
+      form.appendChild(currentIcon);
+    }
+
+    // Checkbox list of Hackatime projects. Linked names that Hackatime no longer
+    // reports (e.g. renamed projects) are kept so they can still be unticked.
+    const linkedNames = project?.hackatimeProjects || [];
+    const hackatimeChoices = (hackatimeProjects || [])
+      .map(({ name, totalSeconds }) => ({ name, detail: formatHackatimeTime(totalSeconds) }))
+      .concat(
+        linkedNames
+          .filter((name) => !(hackatimeProjects || []).some((choice) => choice.name === name))
+          .map((name) => ({ name, detail: "not found on Hackatime" }))
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const hackatimeLabel = document.createElement("div");
+    hackatimeLabel.textContent = "HACKATIME PROJECTS";
+    hackatimeLabel.style.cssText = "font-size:8px;color:#ec3750;";
+
+    const hackatimeList = document.createElement("div");
+    hackatimeList.style.cssText =
+      "display:grid;gap:4px;max-height:180px;overflow-y:auto;padding:6px;background:#fff;border:2px solid #383838;";
+
+    const hackatimeCheckboxes = hackatimeChoices.map((choice) => {
+      const option = document.createElement("label");
+      option.style.cssText =
+        "display:flex;align-items:center;gap:8px;padding:4px;font-size:7px;line-height:1.5;cursor:pointer;word-break:break-word;";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = choice.name;
+      checkbox.checked = linkedNames.includes(choice.name);
+      const text = document.createElement("span");
+      text.textContent = `${choice.name} (${choice.detail})`;
+      option.appendChild(checkbox);
+      option.appendChild(text);
+      hackatimeList.appendChild(option);
+      return checkbox;
+    });
+
+    if (hackatimeChoices.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = hackatimeProjects
+        ? "No Hackatime projects yet."
+        : "Could not load your Hackatime projects.";
+      empty.style.cssText = "font-size:7px;color:#585858;padding:4px;";
+      hackatimeList.appendChild(empty);
+    }
+
+    form.appendChild(hackatimeLabel);
+    form.appendChild(hackatimeList);
+
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;gap:8px;";
+
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.textContent = "CANCEL";
+    cancelButton.style.cssText =
+      "padding:8px 10px;border:2px solid #383838;background:#fff;color:#383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+    cancelButton.addEventListener("click", renderProjects);
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "submit";
+    saveButton.textContent = project ? "SAVE" : "CREATE";
+    saveButton.style.cssText =
+      "padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    const message = document.createElement("div");
+    message.style.cssText = "min-height:12px;font-size:7px;color:#ec3750;line-height:1.5;";
+
+    actions.appendChild(cancelButton);
+    actions.appendChild(saveButton);
+
+    form.appendChild(actions);
+    form.appendChild(message);
+
+    if (project) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "DELETE PROJECT";
+      deleteButton.style.cssText =
+        "align-self:flex-start;margin-top:4px;padding:8px 10px;border:2px solid #383838;background:#b42318;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+      deleteButton.addEventListener("click", async () => {
+        if (!window.confirm(`Permanently delete ${project.name}? This cannot be undone.`)) {
+          return;
+        }
+
+        deleteButton.disabled = true;
+        saveButton.disabled = true;
+        message.style.color = "#585858";
+        message.textContent = "Deleting...";
+
+        try {
+          const response = await fetch(`api/my-projects/${project.id}`, { method: "DELETE" });
+          const data = await response.json();
+          if (!response.ok) {
+            message.style.color = "#ec3750";
+            message.textContent = data.error || "Could not delete project.";
+            deleteButton.disabled = false;
+            saveButton.disabled = false;
+            return;
+          }
+
+          myProjects.projects = myProjects.projects.filter(({ id }) => id !== project.id);
+          renderProjects();
+        } catch (err) {
+          message.style.color = "#ec3750";
+          message.textContent = "Connection error.";
+          deleteButton.disabled = false;
+          saveButton.disabled = false;
+        }
+      });
+
+      form.appendChild(deleteButton);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const iconFile = iconInput.files[0];
+      if (!nameInput.value.trim()) {
+        message.style.color = "#ec3750";
+        message.textContent = "Your project needs a name.";
+        return;
+      }
+      if (iconFile && !PROJECT_ICON_TYPES.includes(iconFile.type)) {
+        message.style.color = "#ec3750";
+        message.textContent = "Icon must be a PNG, JPEG, GIF or WebP image.";
+        return;
+      }
+      if (iconFile && iconFile.size > MAX_PROJECT_ICON_BYTES) {
+        message.style.color = "#ec3750";
+        message.textContent = "Icon must be 256 KB or smaller.";
+        return;
+      }
+
+      saveButton.disabled = true;
+      message.style.color = "#585858";
+      message.textContent = "Saving...";
+
+      try {
+        const response = await fetch(project ? `api/my-projects/${project.id}` : "api/my-projects", {
+          method: project ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: nameInput.value,
+            description: descriptionInput.value,
+            codeUrl: codeUrlInput.value,
+            playableUrl: playableUrlInput.value,
+            hackatimeProjects: hackatimeCheckboxes
+              .filter((checkbox) => checkbox.checked)
+              .map((checkbox) => checkbox.value),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          message.style.color = "#ec3750";
+          message.textContent = data.error || "Could not save project.";
+          saveButton.disabled = false;
+          return;
+        }
+
+        const savedProject = project ? Object.assign(project, data.project) : data.project;
+        if (!project) myProjects.projects.push(savedProject);
+
+        // Icon changes are separate requests: upload a new file, or remove the current one.
+        let iconRequest = null;
+        if (iconFile) {
+          message.textContent = "Uploading icon...";
+          iconRequest = fetch(`api/my-projects/${savedProject.id}/icon`, {
+            method: "PUT",
+            headers: { "Content-Type": iconFile.type },
+            body: iconFile,
+          });
+        } else if (removeIconCheckbox.checked) {
+          iconRequest = fetch(`api/my-projects/${savedProject.id}/icon`, { method: "DELETE" });
+        }
+
+        if (iconRequest) {
+          const iconResponse = await iconRequest;
+          const iconData = await iconResponse.json();
+          if (!iconResponse.ok) {
+            // The project is saved now, so show the list with the error rather than resubmitting.
+            renderProjects();
+            const iconError = document.createElement("div");
+            iconError.textContent = `${savedProject.name} was saved, but its icon could not be updated: ${iconData.error || "unknown error"}`;
+            iconError.style.cssText = "font-size:7px;color:#ec3750;line-height:1.5;margin-top:10px;";
+            projectsView.insertBefore(iconError, projectsView.lastChild);
+            return;
+          }
+          Object.assign(savedProject, iconData.project);
+        }
+
+        renderProjects();
+      } catch (err) {
+        message.style.color = "#ec3750";
+        message.textContent = "Connection error.";
+        saveButton.disabled = false;
+      }
+    });
+
+    projectsView.appendChild(form);
+    projectsView.appendChild(projectsHint());
+    nameInput.focus();
+  }
+
+  // A form whose typing doesn't reach the game's hotkeys and movement keys; Escape still closes the menu.
+  function menuForm() {
+    const form = document.createElement("form");
+    form.style.cssText = "display:flex;flex-direction:column;gap:12px;";
+    form.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") event.stopPropagation();
+    });
+    return form;
+  }
+
+  function sectionLabel(text) {
+    const label = document.createElement("div");
+    label.textContent = text;
+    label.style.cssText = "font-size:9px;color:#ec3750;";
+    return label;
+  }
+
+  // Adds name fields, an ADDRESS section and birthday to `form`, filled in from `profile`.
+  // Returns a function that reads the current values.
+  function appendPersonalDetailsFields(form, profile) {
+    const inputs = {};
+
+    function textField(parent, key, labelText, maxLength) {
+      const label = document.createElement("label");
+      label.style.cssText =
+        "display:flex;flex-direction:column;gap:6px;min-width:0;font-size:8px;color:#383838;";
+      label.appendChild(document.createTextNode(labelText));
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = maxLength;
+      input.value = profile?.[key] || "";
+      input.style.cssText = FORM_FIELD_STYLE;
+      label.appendChild(input);
+      parent.appendChild(label);
+      inputs[key] = input;
+      return input;
+    }
+
+    function row() {
+      const rowEl = document.createElement("div");
+      rowEl.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;";
+      return rowEl;
+    }
+
+    const nameRow = row();
+    textField(nameRow, "firstName", "FIRST NAME", 100);
+    textField(nameRow, "lastName", "LAST NAME", 100);
+    form.appendChild(nameRow);
+
+    const address = document.createElement("div");
+    address.style.cssText =
+      "display:flex;flex-direction:column;gap:12px;padding:12px;background:#fff;border:2px solid #c0c0c0;";
+    address.appendChild(sectionLabel("ADDRESS"));
+    textField(address, "addressLine1", "ADDRESS (LINE 1)", 200);
+    textField(address, "addressLine2", "ADDRESS (LINE 2)", 200);
+    const cityRow = row();
+    textField(cityRow, "city", "CITY", 100);
+    textField(cityRow, "state", "STATE / PROVINCE", 100);
+    address.appendChild(cityRow);
+    const countryRow = row();
+    textField(countryRow, "country", "COUNTRY", 100);
+    textField(countryRow, "postalCode", "ZIP / POSTAL CODE", 20);
+    address.appendChild(countryRow);
+    form.appendChild(address);
+
+    const birthdayLabel = document.createElement("label");
+    birthdayLabel.style.cssText = "display:flex;flex-direction:column;gap:6px;font-size:8px;color:#383838;";
+    birthdayLabel.appendChild(document.createTextNode("BIRTHDAY"));
+    const birthdayInput = document.createElement("input");
+    birthdayInput.type = "date";
+    birthdayInput.min = "1900-01-01";
+    birthdayInput.max = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local time
+    birthdayInput.value = profile?.birthday || "";
+    birthdayInput.style.cssText = FORM_FIELD_STYLE;
+    birthdayLabel.appendChild(birthdayInput);
+    form.appendChild(birthdayLabel);
+    inputs.birthday = birthdayInput;
+
+    return () =>
+      Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value]));
+  }
+
+  async function openProfileTab() {
+    showMenuTab("YOUR PROFILE", profileView, profileMenuButton);
+    profileView.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.textContent = "Loading...";
+    loading.style.cssText = "font-size:8px;color:#585858;";
+    profileView.appendChild(loading);
+
+    await loadMyProfile();
+    if (profileView.style.display !== "none") renderProfile();
+  }
+
+  function renderProfile() {
+    showMenuTab("YOUR PROFILE", profileView, profileMenuButton);
+    profileView.innerHTML = "";
+
+    const form = menuForm();
+
+    // Character picker: Brendan or May, previewed with the first (facing down) frame.
+    form.appendChild(sectionLabel("CHARACTER"));
+    const characterRow = document.createElement("div");
+    characterRow.style.cssText = "display:flex;gap:8px;";
+    let selectedGender = myProfile?.gender || user.gender;
+    const characterButtons = [
+      { gender: "male", name: "BRENDAN", sprite: "assets/brendan.png" },
+      { gender: "female", name: "MAY", sprite: "assets/may.png" },
+    ].map(({ gender, name, sprite }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.gender = gender;
+      button.setAttribute("aria-label", `Play as ${name}`);
+      button.style.cssText =
+        "display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 14px;border:2px solid #383838;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+      const preview = document.createElement("div");
+      preview.style.cssText = `width:48px;height:48px;background:url(${sprite}) 0 0 / 192px 192px no-repeat;image-rendering:pixelated;`;
+      button.appendChild(preview);
+      button.appendChild(document.createTextNode(name));
+      button.addEventListener("click", () => {
+        selectedGender = gender;
+        updateCharacterButtons();
+      });
+      characterRow.appendChild(button);
+      return button;
+    });
+    function updateCharacterButtons() {
+      characterButtons.forEach((button) => {
+        const selected = button.dataset.gender === selectedGender;
+        button.style.background = selected ? "#ec3750" : "#fff";
+        button.style.color = selected ? "#fff" : "#383838";
+        button.setAttribute("aria-pressed", String(selected));
+      });
+    }
+    updateCharacterButtons();
+    form.appendChild(characterRow);
+
+    form.appendChild(sectionLabel("PERSONAL DETAILS"));
+    const readDetails = appendPersonalDetailsFields(form, myProfile);
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "submit";
+    saveButton.textContent = "SAVE PROFILE";
+    saveButton.style.cssText =
+      "align-self:flex-start;padding:8px 10px;border:2px solid #383838;background:#ec3750;color:#fff;font:8px 'Press Start 2P',monospace;cursor:pointer;";
+
+    const message = document.createElement("div");
+    message.style.cssText = "min-height:12px;font-size:7px;color:#ec3750;line-height:1.5;";
+
+    form.appendChild(saveButton);
+    form.appendChild(message);
+
+    if (!myProfile) {
+      message.textContent = "Could not load your profile. Saving will overwrite it.";
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      saveButton.disabled = true;
+      message.style.color = "#585858";
+      message.textContent = "Saving...";
+
+      try {
+        const response = await fetch("api/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...readDetails(), gender: selectedGender }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          message.style.color = "#ec3750";
+          message.textContent = data.error || "Could not save profile.";
+          return;
+        }
+
+        // The game switches the player's sprite when the server broadcasts the change.
+        myProfile = data.profile;
+        message.style.color = "#198754";
+        message.textContent = "Profile saved.";
+      } catch (err) {
+        message.style.color = "#ec3750";
+        message.textContent = "Connection error.";
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    profileView.appendChild(form);
+    profileView.appendChild(projectsHint());
+  }
+
   async function buyItem(itemId, quantity, buyButton) {
     const item = gameData.items[itemId];
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
@@ -970,42 +1614,8 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
     shopMessage.textContent = "";
     renderShop();
   });
-  testBattleButton.addEventListener("click", async () => {
-    if (testBattleButton.disabled || !gameData.species.charmander) return;
-    testBattleButton.disabled = true;
-    closePokemonMenu();
-
-    try {
-      await startBattle({
-        type: "trainer",
-        trainer: {
-          name: "Brendan",
-          sprite: "assets/npc/brendan.png",
-          dialogue: "Let’s test your battle skills!",
-        },
-        enemyPokemon: [
-          {
-            species: "charmander",
-            level: 5,
-            stats: pokemonStats(gameData.species.charmander, 5),
-            moves: ["scratch", "growl"],
-          },
-        ],
-        onVictory: () => {
-          appendChatMessage({
-            message: "Test battle won!",
-            type: "system",
-          });
-        },
-      });
-    } catch (error) {
-      appendChatMessage({
-        message: error.message || "Could not start the test battle.",
-        type: "system",
-      });
-      testBattleButton.disabled = false;
-    }
-  });
+  projectsMenuButton.addEventListener("click", openProjectsTab);
+  profileMenuButton.addEventListener("click", openProfileTab);
 
   addPokemonButton.addEventListener("click", async () => {
     if (!user.admin || !speciesSelect.value) return;
@@ -1111,6 +1721,39 @@ function createPokemonMenu({ user, gameData, appendChatMessage, onOpen }) {
       }
     } catch (err) {
       // Keep the previous balances if they cannot be refreshed.
+    }
+  }
+
+  async function loadMyProjects() {
+    try {
+      const res = await fetch("api/my-projects");
+      if (res.ok) {
+        myProjects = await res.json();
+      }
+    } catch (err) {
+      // Keep the previous projects if they cannot be refreshed.
+    }
+  }
+
+  // Leaves myProfile null if it can't be loaded.
+  async function loadMyProfile() {
+    try {
+      const res = await fetch("api/profile");
+      if (res.ok) {
+        myProfile = (await res.json()).profile;
+      }
+    } catch (err) {
+      // Keep the previous profile if it cannot be refreshed.
+    }
+  }
+
+  // Leaves hackatimeProjects null if Hackatime can't be reached.
+  async function loadHackatimeProjects() {
+    try {
+      const res = await fetch("api/hackatime/projects");
+      hackatimeProjects = res.ok ? (await res.json()).projects : null;
+    } catch (err) {
+      hackatimeProjects = null;
     }
   }
 

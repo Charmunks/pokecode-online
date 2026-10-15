@@ -16,7 +16,7 @@ function pokemonStats(species, level) {
 function startGame(user) {
   const socket = io({ path: new URL("socket.io", document.baseURI).pathname });
   const otherPlayers = {};
-  const gender = user.gender;
+  let gender = user.gender;
   const name = user.username;
   let battleOpen = false;
   const gameData = { species: {}, moves: {}, items: {}, areas: {} };
@@ -299,7 +299,6 @@ function startGame(user) {
     pokemonMenu = createPokemonMenu({
       user,
       gameData,
-      appendChatMessage: chat.appendMessage,
       onOpen: () => {
         if (playersMenu.isOpen()) playersMenu.close();
       },
@@ -341,6 +340,7 @@ function startGame(user) {
 
       other.sprite.setPosition(data.x, data.y);
       other.nameText.setPosition(data.x, data.y - 20);
+      other.direction = data.direction;
 
       if (data.moving) {
         other.sprite.anims.play(
@@ -353,6 +353,22 @@ function startGame(user) {
           true
         );
       }
+    });
+
+    // Someone (possibly this player, from the PROFILE tab) switched between Brendan and May.
+    socket.on("playerCharacterChanged", ({ id, gender: newGender }) => {
+      if (id === socket.id) {
+        gender = newGender;
+        user.gender = newGender;
+        playerSprite.setTexture(gender);
+        playerSprite.anims.play(`${gender}-idle-${player.direction}`, true);
+      } else if (otherPlayers[id]) {
+        const other = otherPlayers[id];
+        other.gender = newGender;
+        other.sprite.setTexture(newGender);
+        other.sprite.anims.play(`${newGender}-idle-${other.direction}`, true);
+      }
+      playersMenu.refresh();
     });
 
     socket.on("playerDisconnected", (id) => {

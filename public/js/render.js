@@ -200,5 +200,6 @@ function addOtherPlayer(scene, otherPlayers, data) {
     sprite,
     nameText: label,
     gender: data.gender,
+    direction: data.direction || "down",
   };
 }

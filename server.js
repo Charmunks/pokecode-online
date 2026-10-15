@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
 const cookieSession = require("cookie-session");
+const crypto = require("crypto");
 const pokemonData = require("./public/data/pokemon.json");
 const itemData = require("./public/data/items.json");
 const moveData = require("./public/data/moves.json");
@@ -26,6 +27,10 @@ knex.migrate.latest().then(() => {
 const SESSION_SECRET = process.env.SESSION_SECRET || "pokecode-dev-secret-change-me";
 const HC_CLIENT_ID = process.env.HC_CLIENT_ID;
 const HC_CLIENT_SECRET = process.env.HC_CLIENT_SECRET;
+const HACKATIME_CLIENT_ID = process.env.HACKATIME_CLIENT_ID;
+const HACKATIME_CLIENT_SECRET = process.env.HACKATIME_CLIENT_SECRET;
+const HACKATIME_URL = "https://hackatime.hackclub.com";
+const HACKATIME_SCOPE = "profile read";
 const configuredBaseUrl = process.env.BASE_URL || "http://localhost:3000";
 const BASE_URL = new URL(
   /^https?:\/\//i.test(configuredBaseUrl)
@@ -96,6 +101,7 @@ app.get("/api/me", async (req, res) => {
       lastPokemartId: user.lastPokemartId,
       needsStarter: !user.starterReceived && !pokemon,
       impersonating: Boolean(req.session.impersonatorId),
+      hackatimeConnected: Boolean(user.hackatimeId),
     },
   });
 });
@@ -184,6 +190,113 @@ app.get("/auth/callback", async (req, res) => {
   }
 });
 
+// Start Hackatime OAuth flow (links Hackatime to the logged-in account)
+app.get("/auth/hackatime", (req, res) => {
+  if (!req.session.userId) {
+    return res.redirect(`${BASE_URL}/?error=not_logged_in`);
+  }
+  if (!HACKATIME_CLIENT_ID) {
+    return res.redirect(`${BASE_URL}/?error=hackatime_not_configured`);
+  }
+
+  const state = crypto.randomBytes(16).toString("hex");
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = crypto
+    .createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
+  req.session.hackatimeState = state;
+  req.session.hackatimeVerifier = codeVerifier;
+
+  const params = new URLSearchParams({
+    client_id: HACKATIME_CLIENT_ID,
+    redirect_uri: `${BASE_URL}/auth/hackatime/callback`,
+    response_type: "code",
+    scope: HACKATIME_SCOPE,
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+  });
+  res.redirect(`${HACKATIME_URL}/oauth/authorize?${params}`);
+});
+
+// Hackatime OAuth callback
+app.get("/auth/hackatime/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+  const expectedState = req.session.hackatimeState;
+  const codeVerifier = req.session.hackatimeVerifier;
+  req.session.hackatimeState = null;
+  req.session.hackatimeVerifier = null;
+
+  if (!req.session.userId) {
+    return res.redirect(`${BASE_URL}/?error=not_logged_in`);
+  }
+  if (error) {
+    return res.redirect(`${BASE_URL}/?error=hackatime_denied`);
+  }
+  if (!code || !state || state !== expectedState) {
+    return res.redirect(`${BASE_URL}/?error=hackatime_invalid_state`);
+  }
+
+  try {
+    const tokenBody = new URLSearchParams({
+      client_id: HACKATIME_CLIENT_ID,
+      code,
+      redirect_uri: `${BASE_URL}/auth/hackatime/callback`,
+      grant_type: "authorization_code",
+      code_verifier: codeVerifier,
+    });
+    if (HACKATIME_CLIENT_SECRET) {
+      tokenBody.set("client_secret", HACKATIME_CLIENT_SECRET);
+    }
+    const tokenRes = await fetch(`${HACKATIME_URL}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenBody,
+    });
+
+    if (!tokenRes.ok) {
+      console.error("Hackatime token exchange failed:", await tokenRes.text());
+      return res.redirect(`${BASE_URL}/?error=hackatime_token_failed`);
+    }
+
+    const tokenData = await tokenRes.json();
+
+    const meRes = await fetch(`${HACKATIME_URL}/api/v1/authenticated/me`, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+
+    if (!meRes.ok) {
+      console.error("Hackatime user fetch failed:", await meRes.text());
+      return res.redirect(`${BASE_URL}/?error=hackatime_user_fetch_failed`);
+    }
+
+    const meData = await meRes.json();
+    const hackatimeId = String(meData.id);
+
+    const linkedUser = await knex("users")
+      .where({ hackatimeId })
+      .whereNot({ id: req.session.userId })
+      .first();
+    if (linkedUser) {
+      return res.redirect(`${BASE_URL}/?error=hackatime_already_linked`);
+    }
+
+    await knex("users").where({ id: req.session.userId }).update({
+      hackatimeId,
+      hackatimeAccessToken: tokenData.access_token,
+      hackatimeScope: tokenData.scope || HACKATIME_SCOPE,
+      hackatimeConnectedAt: knex.fn.now(),
+      updated_at: knex.fn.now(),
+    });
+
+    res.redirect(`${BASE_URL}/?hackatime=connected`);
+  } catch (err) {
+    console.error("Hackatime OAuth error:", err);
+    res.redirect(`${BASE_URL}/?error=hackatime_oauth_error`);
+  }
+});
+
 // Logout
 app.post("/auth/logout", (req, res) => {
   req.session = null;
@@ -236,6 +349,7 @@ app.post("/api/setup", requireAuth, async (req, res) => {
       lastPokemartId: user.lastPokemartId,
       needsStarter: !user.starterReceived && !pokemon,
       impersonating: Boolean(req.session.impersonatorId),
+      hackatimeConnected: Boolean(user.hackatimeId),
     },
   });
 });
@@ -657,6 +771,385 @@ app.post("/api/my-items", requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json({ item });
 });
 
+// ─── Profile ───
+
+// Text profile columns on users, with their max lengths.
+const PROFILE_TEXT_FIELDS = {
+  firstName: { label: "First name", max: 100 },
+  lastName: { label: "Last name", max: 100 },
+  addressLine1: { label: "Address (line 1)", max: 200 },
+  addressLine2: { label: "Address (line 2)", max: 200 },
+  city: { label: "City", max: 100 },
+  state: { label: "State / Province", max: 100 },
+  country: { label: "Country", max: 100 },
+  postalCode: { label: "ZIP / Postal code", max: 20 },
+};
+
+// pg returns DATE columns as local-midnight Dates; turn them back into YYYY-MM-DD.
+function formatDateOnly(value) {
+  if (!value) return null;
+  if (typeof value === "string") return value.slice(0, 10);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+function profileJson(user) {
+  const profile = { gender: user.gender, birthday: formatDateOnly(user.birthday) };
+  for (const field of Object.keys(PROFILE_TEXT_FIELDS)) profile[field] = user[field] || "";
+  return profile;
+}
+
+// Validate profile fields from a request body. Fields that are missing from the body are
+// left out; blank ones become null.
+function parseProfileBody(body) {
+  const fields = {};
+  for (const [field, { label, max }] of Object.entries(PROFILE_TEXT_FIELDS)) {
+    const value = body?.[field];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== "string") throw httpError(400, `${label} must be text`);
+    const trimmed = value.trim();
+    if (trimmed.length > max) throw httpError(400, `${label} must be at most ${max} characters`);
+    fields[field] = trimmed || null;
+  }
+
+  if (body?.birthday !== undefined && body?.birthday !== null) {
+    const birthday = typeof body.birthday === "string" ? body.birthday.trim() : null;
+    if (birthday) {
+      const date = new Date(`${birthday}T00:00:00Z`);
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(birthday) ||
+        Number.isNaN(date.getTime()) ||
+        date.toISOString().slice(0, 10) !== birthday ||
+        birthday < "1900-01-01" ||
+        date > new Date()
+      ) {
+        throw httpError(400, "Birthday must be a valid past date");
+      }
+    }
+    fields.birthday = birthday || null;
+  }
+
+  if (body?.gender !== undefined) {
+    if (!["male", "female"].includes(body.gender)) throw httpError(400, "Invalid character");
+    fields.gender = body.gender;
+  }
+
+  return fields;
+}
+
+// Show a character change to everyone, including the user's other open tabs.
+function broadcastCharacterChange(userId, gender) {
+  for (const [socketId, socketUserId] of Object.entries(activeSockets)) {
+    if (Number(socketUserId) !== userId || !players[socketId]) continue;
+    players[socketId].gender = gender;
+    io.emit("playerCharacterChanged", { id: socketId, gender });
+  }
+}
+
+app.get("/api/profile", requireAuth, async (req, res) => {
+  const user = await knex("users").where({ id: req.session.userId }).first();
+  res.json({ profile: profileJson(user) });
+});
+
+// Update any of the profile fields and the character (gender).
+app.patch("/api/profile", requireAuth, async (req, res) => {
+  let fields;
+  try {
+    fields = parseProfileBody(req.body);
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: error.message });
+  }
+
+  const before = await knex("users").where({ id: req.session.userId }).first();
+  const [user] = await knex("users")
+    .where({ id: req.session.userId })
+    .update({ ...fields, updated_at: knex.fn.now() })
+    .returning("*");
+  if (user.gender !== before.gender) broadcastCharacterChange(user.id, user.gender);
+
+  res.json({ profile: profileJson(user) });
+});
+
+// ─── Projects ───
+
+// Fetch the user's Hackatime projects with their stored token (needs the read scope).
+async function fetchHackatimeProjects(accessToken) {
+  const response = await fetch(`${HACKATIME_URL}/api/v1/authenticated/projects`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (!response.ok) {
+    console.error("Hackatime projects fetch failed:", await response.text());
+    throw httpError(502, "Could not load your Hackatime projects");
+  }
+  const data = await response.json();
+  return (data.projects || []).map((project) => ({
+    name: project.name,
+    totalSeconds: project.total_seconds || 0,
+  }));
+}
+
+const PROJECT_COLUMNS = [
+  "id",
+  "name",
+  "description",
+  "iconType",
+  "hackatimeProjects",
+  "codeUrl",
+  "playableUrl",
+  "updated_at",
+];
+const MAX_PROJECT_ICON_BYTES = 256 * 1024;
+
+function projectJson(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    // The version query lets the browser cache the icon until it changes.
+    icon: row.iconType
+      ? `api/projects/${row.id}/icon?v=${new Date(row.updated_at).getTime()}`
+      : null,
+    hackatimeProjects: row.hackatimeProjects || [],
+    codeUrl: row.codeUrl,
+    playableUrl: row.playableUrl,
+  };
+}
+
+// Optional project link: blank becomes null; anything else must be an http(s) URL.
+function parseProjectUrl(value, label) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw httpError(400, `${label} must be a URL`);
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  let url;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw httpError(400, `${label} must be a valid URL`);
+  }
+  if (!["http:", "https:"].includes(url.protocol) || trimmed.length > 500) {
+    throw httpError(400, `${label} must be an http(s) URL of at most 500 characters`);
+  }
+  return trimmed;
+}
+
+// Validate a create/edit body. Linked Hackatime projects must exist on the user's
+// Hackatime account, except ones already linked (so renamed projects aren't lost).
+async function parseProjectBody(body, user, alreadyLinked = []) {
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const description =
+    typeof body?.description === "string" && body.description.trim()
+      ? body.description.trim()
+      : null;
+  const requested = body?.hackatimeProjects ?? [];
+
+  if (!name || name.length > 100) {
+    throw httpError(400, "Name must be 1 to 100 characters");
+  }
+  if (description && description.length > 1000) {
+    throw httpError(400, "Description must be at most 1000 characters");
+  }
+  const codeUrl = parseProjectUrl(body?.codeUrl, "Code URL");
+  const playableUrl = parseProjectUrl(body?.playableUrl, "Playable URL");
+  if (
+    !Array.isArray(requested) ||
+    requested.length > 50 ||
+    !requested.every((projectName) => typeof projectName === "string" && projectName)
+  ) {
+    throw httpError(400, "Hackatime projects must be a list of up to 50 project names");
+  }
+
+  const hackatimeProjects = Array.from(new Set(requested));
+  const newlyLinked = hackatimeProjects.filter((projectName) => !alreadyLinked.includes(projectName));
+  if (newlyLinked.length > 0) {
+    const available = new Set(
+      (await fetchHackatimeProjects(user.hackatimeAccessToken)).map((project) => project.name)
+    );
+    const missing = newlyLinked.find((projectName) => !available.has(projectName));
+    if (missing) throw httpError(400, `Hackatime project "${missing}" was not found`);
+  }
+
+  return {
+    name,
+    description,
+    codeUrl,
+    playableUrl,
+    hackatimeProjects: JSON.stringify(hackatimeProjects),
+  };
+}
+
+// Detect the image type from the file's magic bytes rather than trusting the client.
+function projectIconType(buffer) {
+  if (buffer.length < 12) return null;
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "image/png";
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.subarray(0, 4).toString("ascii") === "GIF8") return "image/gif";
+  if (
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+// List the user's projects, and whether they have linked Hackatime.
+app.get("/api/my-projects", requireAuth, async (req, res) => {
+  const user = await knex("users").where({ id: req.session.userId }).first();
+  const rows = await knex("user_projects")
+    .where({ userId: user.id })
+    .select(PROJECT_COLUMNS)
+    .orderBy("created_at", "asc");
+  res.json({
+    hackatimeConnected: Boolean(user.hackatimeId),
+    projects: rows.map(projectJson),
+  });
+});
+
+// List the user's Hackatime projects, for the project picker.
+app.get("/api/hackatime/projects", requireAuth, async (req, res) => {
+  const user = await knex("users").where({ id: req.session.userId }).first();
+  if (!user.hackatimeAccessToken) {
+    return res.status(409).json({ error: "Link your Hackatime account first" });
+  }
+  try {
+    res.json({ projects: await fetchHackatimeProjects(user.hackatimeAccessToken) });
+  } catch (error) {
+    res.status(error.status || 502).json({ error: error.message });
+  }
+});
+
+// Create a project. Only the name is required.
+app.post("/api/my-projects", requireAuth, async (req, res) => {
+  const user = await knex("users").where({ id: req.session.userId }).first();
+  if (!user.hackatimeAccessToken) {
+    return res.status(409).json({ error: "Link your Hackatime account first" });
+  }
+
+  let fields;
+  try {
+    fields = await parseProjectBody(req.body, user);
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: error.message });
+  }
+
+  const [project] = await knex("user_projects")
+    .insert({ userId: user.id, ...fields })
+    .returning(PROJECT_COLUMNS);
+
+  res.status(201).json({ project: projectJson(project) });
+});
+
+// Edit a project's name, description and linked Hackatime projects.
+app.patch("/api/my-projects/:id", requireAuth, async (req, res) => {
+  const projectId = parseId(req.params.id);
+  if (!projectId) return res.status(400).json({ error: "Invalid project" });
+
+  const user = await knex("users").where({ id: req.session.userId }).first();
+  const existing = await knex("user_projects")
+    .where({ id: projectId, userId: user.id })
+    .select("hackatimeProjects")
+    .first();
+  if (!existing) return res.status(404).json({ error: "Project not found" });
+  if (!user.hackatimeAccessToken) {
+    return res.status(409).json({ error: "Link your Hackatime account first" });
+  }
+
+  let fields;
+  try {
+    fields = await parseProjectBody(req.body, user, existing.hackatimeProjects || []);
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: error.message });
+  }
+
+  const [project] = await knex("user_projects")
+    .where({ id: projectId, userId: user.id })
+    .update({ ...fields, updated_at: knex.fn.now() })
+    .returning(PROJECT_COLUMNS);
+
+  res.json({ project: projectJson(project) });
+});
+
+// Delete a project.
+app.delete("/api/my-projects/:id", requireAuth, async (req, res) => {
+  const projectId = parseId(req.params.id);
+  if (!projectId) return res.status(400).json({ error: "Invalid project" });
+
+  const deleted = await knex("user_projects")
+    .where({ id: projectId, userId: req.session.userId })
+    .del();
+  if (!deleted) return res.status(404).json({ error: "Project not found" });
+
+  res.json({ ok: true });
+});
+
+// Remove a project's icon.
+app.delete("/api/my-projects/:id/icon", requireAuth, async (req, res) => {
+  const projectId = parseId(req.params.id);
+  if (!projectId) return res.status(400).json({ error: "Invalid project" });
+
+  const [project] = await knex("user_projects")
+    .where({ id: projectId, userId: req.session.userId })
+    .update({ iconData: null, iconType: null, updated_at: knex.fn.now() })
+    .returning(PROJECT_COLUMNS);
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  res.json({ project: projectJson(project) });
+});
+
+// Upload a project's icon. The body is the raw image file (PNG, JPEG, GIF or WebP).
+app.put(
+  "/api/my-projects/:id/icon",
+  requireAuth,
+  express.raw({ type: "image/*", limit: MAX_PROJECT_ICON_BYTES }),
+  async (req, res) => {
+    const projectId = parseId(req.params.id);
+    if (!projectId) return res.status(400).json({ error: "Invalid project" });
+
+    const iconType = Buffer.isBuffer(req.body) ? projectIconType(req.body) : null;
+    if (!iconType) {
+      return res.status(400).json({ error: "Icon must be a PNG, JPEG, GIF or WebP image" });
+    }
+
+    const [project] = await knex("user_projects")
+      .where({ id: projectId, userId: req.session.userId })
+      .update({ iconData: req.body, iconType, updated_at: knex.fn.now() })
+      .returning(PROJECT_COLUMNS);
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    res.json({ project: projectJson(project) });
+  }
+);
+
+// Serve a project's icon image.
+app.get("/api/projects/:id/icon", requireAuth, async (req, res) => {
+  const projectId = parseId(req.params.id);
+  const project = projectId
+    ? await knex("user_projects")
+        .where({ id: projectId })
+        .select("iconData", "iconType")
+        .first()
+    : null;
+  if (!project?.iconData) return res.status(404).end();
+
+  res.set({
+    "Content-Type": project.iconType,
+    "Cache-Control": "private, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
+  });
+  res.send(project.iconData);
+});
+
+// express.raw rejects icons over the size limit before the route runs.
+app.use("/api/my-projects", (err, req, res, next) => {
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Icon must be 256 KB or smaller" });
+  }
+  next(err);
+});
+
 // ─── Admin dashboard ───
 
 function parseId(value) {
@@ -920,6 +1413,7 @@ app.delete("/api/admin/users/:userId", requireAuth, requireAdmin, async (req, re
     await trx("chat_messages").where({ userId }).del();
     await trx("user_items").where({ userId }).del();
     await trx("user_pokemon").where({ userId }).del();
+    await trx("user_projects").where({ userId }).del();
     return trx("users").where({ id: userId }).del();
   });
   if (!deleted) return res.status(404).json({ error: "User not found" });

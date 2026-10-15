@@ -1,5 +1,5 @@
 const BUILDINGS = [
-  pokemart({ id: "northeast-pokemart", name: "Northeast Pokémart", x: 45, y: 1 }),
+  pokemart({ id: "northeast-pokemart", name: "Northeast Pokémart", x: 46, y: 0.5 }),
 ];
 
 // A 4×4 Pokémart with its door on the bottom row. x/y is its top-left tile.
@@ -10,8 +10,8 @@ function pokemart({ id, name, x, y }) {
     type: "pokemart",
     sprite: "assets/tiles/pokemart.png",
     position: { x, y },
-    size: { width: 4, height: 4 },
-    entrance: { x: 1, y: 3 },
+    size: { width: 3, height: 3 },
+    entrance: { x: 1, y: 1.6 },
     onEnter: healParty,
   };
 }

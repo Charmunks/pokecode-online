@@ -74,6 +74,7 @@ pokecode/
 | `playerMove` | Client → Server | `{ x, y, direction, moving }` |
 | `playerMoved` | Server → Others | `{ id, x, y, direction, moving }` |
 | `playerDisconnected` | Server → All | `socketId` |
+| `playerCharacterChanged` | Server → All | `{ id, gender }` (sent when a user switches character in the PROFILE tab) |
 
 ### Collision
 - Tile-based collision check via `isWalkable()` in `render.js`
@@ -99,6 +100,27 @@ pokecode/
 - Editing: `POST /api/admin/users/:userId/pokemon` (`{ speciesId, level, location }`), `PATCH /api/admin/users/:userId/pokemon/:id` (any of `nickname`, `level`, `health`, `friendship`, `location`), `DELETE /api/admin/users/:userId/pokemon/:id`, and `PUT /api/admin/users/:userId/items/:itemId` (`{ quantity }`, 0 removes the item)
 - `DELETE /api/admin/users/:userId` deletes the account with its Pokémon, items and chat messages, and sends `forceLogout` to its open sockets. Admins cannot delete themselves
 - `POST /api/admin/users/:userId/impersonate` switches the session to that user and stores the admin's id in `req.session.impersonatorId`; `/api/me` then returns `impersonating: true` and a banner offers `POST /api/admin/stop-impersonating` to switch back
+
+### Hackatime Integration
+- Links a Hackatime account to an already logged-in user via Hackatime OAuth ([docs](https://hackatime.hackclub.com/docs/oauth/oauth-apps)). Login itself still uses Hack Club Auth (`/auth/login`)
+- Env vars: `HACKATIME_CLIENT_ID` and `HACKATIME_CLIENT_SECRET` (secret optional — omit it for a public/non-confidential app; PKCE is always sent). Register `${BASE_URL}/auth/hackatime/callback` as the redirect URI in the Hackatime OAuth app
+- There is no in-game button yet; start the flow by visiting `/auth/hackatime` directly
+- `GET /auth/hackatime`: requires a session, generates a random `state` and a PKCE `code_verifier` (stored in the cookie session as `hackatimeState`/`hackatimeVerifier`), and redirects to `https://hackatime.hackclub.com/oauth/authorize` with scope `profile read` and an S256 `code_challenge`
+- `GET /auth/hackatime/callback`: checks `state`, exchanges the code at `POST /oauth/token` (form-encoded, with `code_verifier`), fetches `GET /api/v1/authenticated/me`, and saves `hackatimeId`, `hackatimeAccessToken`, `hackatimeScope` and `hackatimeConnectedAt` on `users`. Redirects to `/?hackatime=connected` on success, or `/?error=<code>` with one of `not_logged_in`, `hackatime_not_configured`, `hackatime_denied`, `hackatime_invalid_state`, `hackatime_token_failed`, `hackatime_user_fetch_failed`, `hackatime_already_linked` (that Hackatime account is linked to another user; `hackatimeId` is unique) or `hackatime_oauth_error`
+- Hackatime tokens are long-lived and have no refresh token. Use the stored token as `Authorization: Bearer <hackatimeAccessToken>` against `https://hackatime.hackclub.com/api/v1/authenticated/*` (`hours`, `streak`, `projects`, `heartbeats/latest` need the `read` scope). Never send the token to the client
+- `/api/me` and `/api/setup` return `hackatimeConnected` (boolean) on the user object
+
+### Projects
+- The PROJECTS tab of the `1` menu lists the user's projects (`user_projects` table: `name` (required), `description`, `iconData`/`iconType` (uploaded image bytes, stored in the database so they survive redeploys), `hackatimeProjects` (jsonb array of Hackatime project names), `codeUrl` and `playableUrl` (optional http(s) links, shown as CODE / PLAY buttons on each project)). If Hackatime isn't linked it shows a LINK HACKATIME button pointing at `/auth/hackatime`. Clicking a project opens the same form as ADD PROJECT, pre-filled for editing
+- `GET /api/my-projects` returns `{ hackatimeConnected, projects }`. `GET /api/hackatime/projects` proxies Hackatime's `/api/v1/authenticated/projects` and returns `{ projects: [{ name, totalSeconds }] }`, used for the Hackatime project checkboxes and the summed tracked time
+- `POST /api/my-projects` and `PATCH /api/my-projects/:id` take `{ name, description?, codeUrl?, playableUrl?, hackatimeProjects? }` (up to 50 names), require a linked Hackatime account, and check each newly linked name against the user's Hackatime projects (names already on the project are kept even if Hackatime no longer reports them)
+- Icons are uploaded afterwards with `PUT /api/my-projects/:id/icon`, whose body is the raw image file (PNG, JPEG, GIF or WebP, max 256 KB; the type is checked from the file's bytes). They're served from `GET /api/projects/:id/icon`, and each project's `icon` field holds that URL with a `?v=` cache-busting version, or `null` if it has no icon. `DELETE /api/my-projects/:id/icon` removes it
+- The edit form has a DELETE PROJECT button (with a confirm prompt) that calls `DELETE /api/my-projects/:id`
+
+### Profile
+- The PROFILE tab of the `1` menu edits the user's character (Brendan = `male`, May = `female`, stored in `users.gender`) and personal details stored on `users`: `firstName`, `lastName`, `addressLine1`, `addressLine2`, `city`, `state`, `country`, `postalCode` and `birthday` (DATE, sent as `YYYY-MM-DD`). All personal details are optional
+- `GET /api/profile` returns `{ profile }`; `PATCH /api/profile` takes any of those fields plus `gender` (blank strings clear a field) and returns the updated `{ profile }`. Changing `gender` updates the in-memory player and emits `playerCharacterChanged`, and `game.js` swaps the sprite texture for that player
+- Validation lives in `parseProfileBody()` in `server.js`
 
 ### Shop
 - Items in `public/data/items.json` with `shopPrice` (integer) and `shopType` (`pokedollars` or `watts`) are sold in the SHOP tab of the `1` menu, grouped by currency. Items without these fields are not sold
